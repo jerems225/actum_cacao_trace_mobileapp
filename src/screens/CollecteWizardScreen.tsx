@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,62 @@ import {
   TextInput,
   TouchableOpacity,
   Switch,
+  Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { Header } from '../components/common/Header';
-import { CompassGPSGauge } from '../components/GPS/CompassGPSGauge';
+import { PlacettePointsCapture } from '../components/GPS/PlacettePointsCapture';
+import type { ManualPointValues } from '../components/GPS/PlacettePointsCapture';
 import { colors, useResponsive } from '../theme';
 import { LocationService, LocationError } from '../services/location';
 import { offlineStorage } from '../services/storage';
+import { delegationsService } from '../services/delegations';
+import { settingsService } from '../services/settings';
+import { referentielsService } from '../services/referentiels';
 import { notificationService } from '../services/notification';
 import { toast } from '../components/common/Toast';
-import { TypeSujet, EtatSanitaire, formatRole } from '../types';
+import {
+  TypeSujet,
+  EtatSanitaire,
+  Genre,
+  TrancheAge,
+  TypePoint,
+  UniteProduction,
+  PratiqueRetenue,
+  AgentPratiquant,
+  FrequencePratique,
+  VOLETS_PRATIQUE,
+  TYPES_PAR_VOLET,
+  TRANCHE_AGE_LABELS,
+  ETAT_SANITAIRE_LABELS,
+  PRATIQUE_RETENUE_LABELS,
+  AGENT_PRATIQUANT_LABELS,
+  FREQUENCE_PRATIQUE_LABELS,
+  MALADIES_PAR_DEFAUT,
+  formatRole,
+} from '../types';
+import {
+  LIMITES,
+  parseNombre,
+  sanitizeDecimal,
+  sanitizeEntier,
+  verifieBorne,
+} from '../utils/champs';
 import type { UserProfile } from '../services/auth';
-import type { PointGPS, TabType, SousPlacetteLocal, MesureArbreLocal } from '../types';
+import type {
+  PointGPS,
+  TabType,
+  SousPlacetteLocal,
+  MesureArbreLocal,
+  Delegation,
+  PlacetteLocal,
+  Espece,
+  Maladie,
+  VoletPratique,
+  PratiqueCulturaleLocal,
+} from '../types';
 
 interface CollecteWizardScreenProps {
   onNavigate: (tab: TabType) => void;
@@ -28,15 +72,79 @@ interface CollecteWizardScreenProps {
   user?: UserProfile | null;
 }
 
+/**
+ * Brouillon de saisie d'UN volet de pratiques culturales (B4).
+ * Les valeurs restent en chaînes tant que l'agent saisit : la conversion et le
+ * contrôle des bornes se font à la validation de l'étape.
+ */
+interface VoletDraft {
+  types: string[];
+  typesAutre: string;
+  agents: AgentPratiquant[];
+  agentsAutre: string;
+  frequence: FrequencePratique | null;
+  frequenceAutre: string;
+  nombreFoisParAn: string;
+}
+
+const VOLET_VIDE: VoletDraft = {
+  types: [],
+  typesAutre: '',
+  agents: [],
+  agentsAutre: '',
+  frequence: null,
+  frequenceAutre: '',
+  nombreFoisParAn: '',
+};
+
+/**
+ * Brouillon de saisie d'UNE mesure, propre à une sous-placette.
+ * Chaque SP possède le sien : c'est ce qui garantit que la circonférence tapée
+ * pour SP1 ne réapparaît pas dans SP2.
+ */
+interface MesureDraft {
+  typeSujet: TypeSujet;
+  /** cm ou DBH (m) — pertinent pour le cacaoyer uniquement. */
+  circoMode: 'CM' | 'DBH';
+  circoValue: string;
+  hauteur: string;
+  etatSanitaire: EtatSanitaire;
+  especeId: string | null;
+  especeAutre: string;
+  /** Clé de l'option de maladie retenue (`id:<uuid>` ou `nom:<libellé>`). */
+  maladieKey: string | null;
+  maladieAutre: string;
+  photoMaladie: string | null;
+}
+
+const DRAFT_VIDE: MesureDraft = {
+  typeSujet: TypeSujet.CACAO,
+  circoMode: 'CM',
+  circoValue: '',
+  hauteur: '',
+  etatSanitaire: EtatSanitaire.VIVANT,
+  especeId: null,
+  especeAutre: '',
+  maladieKey: null,
+  maladieAutre: '',
+  photoMaladie: null,
+};
+
 /** Mesure saisie en cours de collecte, rattachée à un numéro de sous-placette. */
 interface MesureCollectee {
   numeroSP: number;
   typeSujet: TypeSujet;
   espece?: string;
+  especeId?: string;
+  especeLibre?: string;
+  emetOmbre?: boolean;
   circonference30cm?: number;
   circonferenceDBH?: number;
   hauteurTotale?: number;
   etatSanitaire: EtatSanitaire;
+  maladieId?: string;
+  maladieLibre?: string;
+  photoMaladie?: string;
 }
 
 export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
@@ -47,83 +155,321 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   user,
 }) => {
   const { paddingHorizontal, contentStyle } = useResponsive();
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // --- Bloc A ---
   const [nom, setNom] = useState('');
   const [prenoms, setPrenoms] = useState('');
+  const [genre, setGenre] = useState<Genre | null>(null);
+  const [trancheAge, setTrancheAge] = useState<TrancheAge | null>(null);
   const [identite, setIdentite] = useState('');
   const [rgpdConsent, setRgpdConsent] = useState(true);
 
   // --- Bloc B ---
   const [anneeParcelle, setAnneeParcelle] = useState('');
   const [superficie, setSuperficie] = useState('');
-  const [entretienType, setEntretienType] = useState('');
-  const [maladies, setMaladies] = useState('');
+  // B4 — cases de tête : quels volets sont à renseigner.
+  const [pratiquesRetenues, setPratiquesRetenues] = useState<PratiqueRetenue[]>([]);
+  const [aucunePrecision, setAucunePrecision] = useState(''); // B4.1
+  const [autresPrecision, setAutresPrecision] = useState(''); // B4.2
+  // Détail des volets : un brouillon PAR volet. Même principe qu'au Bloc D —
+  // Entretien, Tailles et Engrais ne partagent aucun champ.
+  const [voletsDetail, setVoletsDetail] = useState<Record<VoletPratique, VoletDraft>>({
+    [PratiqueRetenue.ENTRETIEN]: { ...VOLET_VIDE },
+    [PratiqueRetenue.TAILLES]: { ...VOLET_VIDE },
+    [PratiqueRetenue.ENGRAIS]: { ...VOLET_VIDE },
+  });
+  const [voletActif, setVoletActif] = useState<VoletPratique | null>(null);
+  // Maladies observées sur la parcelle : sélection multiple dans le référentiel
+  // (les libellés, pas les ids : la parcelle porte un constat, pas une relation).
+  const [maladiesParcelle, setMaladiesParcelle] = useState<string[]>([]);
+  // Maladie constatée absente du référentiel → champ `maladiesNonListees`.
+  const [maladiesAutre, setMaladiesAutre] = useState('');
   const [productionEstimee, setProductionEstimee] = useState('');
 
-  // --- Bloc C ---
-  const [numeroPlacette, setNumeroPlacette] = useState(
-    `PLC-${Math.floor(1000 + Math.random() * 9000)}`,
-  );
-  const [delegation, setDelegation] = useState('');
+  // Volets réellement à saisir = intersection des cases cochées et des 3 volets.
+  const voletsCoches = VOLETS_PRATIQUE.filter((v) => pratiquesRetenues.includes(v));
+  // Onglet courant : celui choisi s'il est encore coché, sinon le premier.
+  // Calculé plutôt que synchronisé, pour ne jamais pointer un volet décoché.
+  const voletCourant: VoletPratique | null =
+    voletActif && voletsCoches.includes(voletActif) ? voletActif : voletsCoches[0] ?? null;
+  const detailCourant = voletCourant ? voletsDetail[voletCourant] : null;
+
+  const patchVolet = (patch: Partial<VoletDraft>) => {
+    if (!voletCourant) return;
+    setVoletsDetail((prev) => ({
+      ...prev,
+      [voletCourant]: { ...prev[voletCourant], ...patch },
+    }));
+  };
+
+  /**
+   * Coche/décoche une case de tête du B4.
+   * « Aucune pratique » est exclusive des trois volets : cocher l'une décoche
+   * l'autre, plutôt que de laisser passer une fiche contradictoire.
+   */
+  const togglePratiqueRetenue = (p: PratiqueRetenue) =>
+    setPratiquesRetenues((prev) => {
+      if (prev.includes(p)) return prev.filter((x) => x !== p);
+      if (p === PratiqueRetenue.AUCUNE) {
+        return [...prev.filter((x) => !VOLETS_PRATIQUE.includes(x as VoletPratique)), p];
+      }
+      const sansAucune = prev.filter((x) => x !== PratiqueRetenue.AUCUNE);
+      return [...sansAucune, p];
+    });
+
+  const toggleDansListe = <T,>(liste: T[], valeur: T): T[] =>
+    liste.includes(valeur) ? liste.filter((x) => x !== valeur) : [...liste, valeur];
+
+  const toggleMaladieParcelle = (nom: string) =>
+    setMaladiesParcelle((prev) =>
+      prev.includes(nom) ? prev.filter((x) => x !== nom) : [...prev, nom],
+    );
+
+  // --- Bloc C : référentiel géographique (délégation → ville) ---
+  const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [placettesLocales, setPlacettesLocales] = useState<PlacetteLocal[]>([]);
+  const [delegationId, setDelegationId] = useState<string | null>(null);
+  const [villeId, setVilleId] = useState<string | null>(null);
   const [village, setVillage] = useState('');
-  const [sommets, setSommets] = useState<PointGPS[]>([]);
-  const [activeSommet, setActiveSommet] = useState(1);
+  // Tous les points de la placette (S1-4, Mi1-6, Mc1-2).
+  const [points, setPoints] = useState<PointGPS[]>([]);
+  const [capturing, setCapturing] = useState<{ type: TypePoint; ordre: number } | null>(null);
+  const sommetsOnly = points.filter((p) => p.typePoint === TypePoint.SOMMET);
+
+  // Édition manuelle des coordonnées : interdite à l'agent terrain, sauf si
+  // l'administration l'a activée via le réglage `agentManualPointEdit`.
+  const [manualEditEnabled, setManualEditEnabled] = useState(false);
+  const canEditPoints = user?.role !== 'AGENT_TERRAIN' || manualEditEnabled;
+
+  // --- Identification de la collecte ---
+  // Date relevée automatiquement par le système à l'ouverture de la fiche.
+  const [collecteDate] = useState(() => new Date());
+  // Chef d'équipe : pré-rempli si l'agent connecté est lui-même chef d'équipe.
+  const [chefEquipe, setChefEquipe] = useState(
+    user?.role === 'CHEF_EQUIPE' ? `${user.prenoms} ${user.nom}`.trim() : '',
+  );
+  const dateCollecteLabel = `${String(collecteDate.getDate()).padStart(2, '0')}/${String(
+    collecteDate.getMonth() + 1,
+  ).padStart(2, '0')}/${collecteDate.getFullYear()}`;
+
+  // Chargement du référentiel (cache immédiat, puis rafraîchissement réseau)
+  // et des placettes locales (pour l'aperçu du compteur).
+  useEffect(() => {
+    (async () => {
+      setDelegations(await delegationsService.getCached());
+      setPlacettesLocales(await offlineStorage.getPlacettes());
+      setManualEditEnabled((await settingsService.getCached()).agentManualPointEdit);
+      setEspeces(await referentielsService.getEspecesCached());
+      setMaladiesList(await referentielsService.getMaladiesCached());
+      setDelegations(await delegationsService.refresh());
+      setManualEditEnabled((await settingsService.refresh()).agentManualPointEdit);
+      const ref = await referentielsService.refresh();
+      setEspeces(ref.especes);
+      setMaladiesList(ref.maladies);
+    })();
+  }, []);
+
+  const selectedDelegation = delegations.find((d) => d.id === delegationId) ?? null;
+  const selectedVille = selectedDelegation?.villes.find((v) => v.id === villeId) ?? null;
+
+  // Aperçu du numéro : le compteur définitif est attribué par le serveur à la
+  // synchro ; ici on propose une séquence LOCALE provisoire (placettes déjà
+  // saisies pour ce couple délégation/ville + 1).
+  const sequenceProvisoire =
+    placettesLocales.filter((p) => p.delegationId === delegationId && p.villeId === villeId)
+      .length + 1;
+  const numeroApercu =
+    selectedDelegation && selectedVille
+      ? `D-${selectedDelegation.code}-${selectedVille.code}-${String(sequenceProvisoire).padStart(3, '0')}`
+      : null;
 
   // --- Bloc D ---
   const [selectedSP, setSelectedSP] = useState(1);
-  const [typeSujet, setTypeSujet] = useState<TypeSujet>(TypeSujet.CACAO);
-  const [espece, setEspece] = useState('');
-  const [circo30, setCirco30] = useState('');
-  const [circoDBH, setCircoDBH] = useState('');
-  const [hauteur, setHauteur] = useState('');
-  const [etatSanitaire] = useState<EtatSanitaire>(EtatSanitaire.SAIN);
+  // Référentiels espèces / maladies (chargés + mis en cache)
+  const [especes, setEspeces] = useState<Espece[]>([]);
+  const [maladiesList, setMaladiesList] = useState<Maladie[]>([]);
+  // Compteurs par sous-placette
+  const [nombrePlantsBySP, setNombrePlantsBySP] = useState<Record<number, string>>({});
+  const [nombreArbresBySP, setNombreArbresBySP] = useState<Record<number, string>>({});
   const [mesuresCollectees, setMesuresCollectees] = useState<MesureCollectee[]>([]);
+  // Un brouillon de saisie PAR sous-placette : SP1 et SP4 ne partagent plus
+  // aucun champ. Basculer d'onglet retrouve la saisie laissée en cours, sans
+  // jamais recopier les valeurs d'une autre sous-placette.
+  const [draftsBySP, setDraftsBySP] = useState<Record<number, MesureDraft>>({});
 
-  const parseNum = (v: string): number | undefined => {
-    const n = parseFloat(v.replace(',', '.'));
-    return Number.isFinite(n) ? n : undefined;
-  };
+  const draft = draftsBySP[selectedSP] ?? DRAFT_VIDE;
+  const patchDraft = (patch: Partial<MesureDraft>) =>
+    setDraftsBySP((prev) => ({
+      ...prev,
+      [selectedSP]: { ...(prev[selectedSP] ?? DRAFT_VIDE), ...patch },
+    }));
 
-  const handleCaptureGPS = async (ordre: number) => {
+  const isCacao = draft.typeSujet === TypeSujet.CACAO;
+  // Un arbre d'ombrage se mesure toujours en DBH (m) ; le choix cm/DBH ne
+  // concerne que le cacaoyer.
+  const circoMode: 'CM' | 'DBH' = isCacao ? draft.circoMode : 'DBH';
+  const limiteCirco = circoMode === 'CM' ? LIMITES.circonference30cmCm : LIMITES.circonferenceDBHM;
+
+  const cacaoCountForSP = mesuresCollectees.filter(
+    (m) => m.numeroSP === selectedSP && m.typeSujet === TypeSujet.CACAO,
+  ).length;
+
+  /**
+   * Maladies proposées : le référentiel serveur dès qu'il est synchronisé,
+   * sinon le repli embarqué pour que la liste ne soit jamais vide sur le
+   * terrain. Une option sans `id` partira en `maladieLibre` (le backend la
+   * rapproche par nom).
+   */
+  const maladieOptions: { key: string; id?: string; nom: string }[] = maladiesList.length
+    ? maladiesList.map((m) => ({ key: `id:${m.id}`, id: m.id, nom: m.nom }))
+    : MALADIES_PAR_DEFAUT.map((nom) => ({ key: `nom:${nom}`, nom }));
+
+  const parseNum = parseNombre;
+
+  const handleCapturePoint = async (type: TypePoint, ordre: number) => {
+    if (capturing) return;
+    setCapturing({ type, ordre });
     try {
-      const point = await LocationService.getCurrentPosition(ordre);
-      setSommets((prev) => {
-        const filtered = prev.filter((s) => s.ordreSommet !== ordre);
-        return [...filtered, point].sort((a, b) => a.ordreSommet - b.ordreSommet);
+      const point = await LocationService.getCurrentPosition(type, ordre);
+      setPoints((prev) => {
+        // Remplace le point de même catégorie+ordre s'il existe (re-capture).
+        const filtered = prev.filter(
+          (p) => !(p.typePoint === type && p.ordreSommet === ordre),
+        );
+        return [...filtered, point];
       });
-      if (ordre < 4) setActiveSommet(ordre + 1);
     } catch (e) {
       const message = e instanceof LocationError ? e.message : 'Échec de la capture GPS.';
       toast.error(message);
+    } finally {
+      setCapturing(null);
+    }
+  };
+
+  // Correction manuelle des coordonnées d'un point déjà relevé.
+  const handleEditPoint = (type: TypePoint, ordre: number, values: ManualPointValues) => {
+    setPoints((prev) => {
+      const existing = prev.find((p) => p.typePoint === type && p.ordreSommet === ordre);
+      if (!existing) return prev;
+      const filtered = prev.filter((p) => !(p.typePoint === type && p.ordreSommet === ordre));
+      return [...filtered, { ...existing, ...values }];
+    });
+  };
+
+  /** Photo de diagnostic (état MALADE) : caméra, repli galerie. */
+  const handleCapturePhotoMaladie = async () => {
+    try {
+      const cam = await ImagePicker.requestCameraPermissionsAsync();
+      if (cam.granted) {
+        const r = await ImagePicker.launchCameraAsync({ quality: 0.6 });
+        if (!r.canceled && r.assets?.[0]) patchDraft({ photoMaladie: r.assets[0].uri });
+        return;
+      }
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!lib.granted) {
+        toast.error('Autorisation caméra ou galerie requise pour la photo de diagnostic.');
+        return;
+      }
+      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      if (!r.canceled && r.assets?.[0]) patchDraft({ photoMaladie: r.assets[0].uri });
+    } catch {
+      toast.error('Impossible de prendre la photo.');
     }
   };
 
   const handleAddMesure = () => {
-    if (typeSujet === TypeSujet.ARBRE_OMBRAGE && !espece.trim()) {
-      toast.error("L'espèce est obligatoire pour un arbre d'ombrage.");
+    // Règle SP2-6 : 3 cacaoyers maximum (SP1 illimité).
+    if (isCacao && selectedSP !== 1 && cacaoCountForSP >= 3) {
+      toast.error('Maximum 3 cacaoyers par sous-placette (SP2 à SP6).');
       return;
     }
+
+    // Espèce obligatoire pour un arbre (liste ou « autre »).
+    let especeNom: string | undefined;
+    let especeIdVal: string | undefined;
+    let especeLibreVal: string | undefined;
+    let emetOmbreVal: boolean | undefined;
+    if (!isCacao) {
+      if (draft.especeId) {
+        const e = especes.find((x) => x.id === draft.especeId);
+        especeIdVal = draft.especeId;
+        especeNom = e?.nom;
+        emetOmbreVal = e?.emetOmbre;
+      } else if (draft.especeAutre.trim()) {
+        especeLibreVal = draft.especeAutre.trim();
+        especeNom = draft.especeAutre.trim();
+        emetOmbreVal = false; // espèce hors-liste = non émettrice d'ombre
+      } else {
+        toast.error("Sélectionnez l'espèce de l'arbre (ou saisissez-la).");
+        return;
+      }
+    }
+
+    // Bornes de plausibilité : on refuse ici ce que le backend refuserait aussi.
+    const erreurCirco = verifieBorne(
+      draft.circoValue,
+      limiteCirco,
+      circoMode === 'CM' ? 'Circonférence' : 'DBH',
+    );
+    if (erreurCirco) {
+      toast.error(erreurCirco);
+      return;
+    }
+    const erreurHauteur = verifieBorne(draft.hauteur, LIMITES.hauteurM, 'Hauteur totale');
+    if (erreurHauteur) {
+      toast.error(erreurHauteur);
+      return;
+    }
+
+    // État MALADE : maladie (liste ou « autre ») + photo obligatoires.
+    let maladieIdVal: string | undefined;
+    let maladieLibreVal: string | undefined;
+    if (draft.etatSanitaire === EtatSanitaire.MALADE) {
+      const option = maladieOptions.find((o) => o.key === draft.maladieKey);
+      if (option?.id) maladieIdVal = option.id;
+      // Option issue du repli hors-ligne (pas d'id) → transmise par son nom.
+      else if (option) maladieLibreVal = option.nom;
+      else if (draft.maladieAutre.trim()) maladieLibreVal = draft.maladieAutre.trim();
+      else {
+        toast.error('Précisez la maladie.');
+        return;
+      }
+      if (!draft.photoMaladie) {
+        toast.error('Une photo de diagnostic est obligatoire pour un sujet malade.');
+        return;
+      }
+    }
+
     setMesuresCollectees((prev) => [
       ...prev,
       {
         numeroSP: selectedSP,
-        typeSujet,
-        espece: espece.trim() || undefined,
-        circonference30cm: parseNum(circo30),
-        circonferenceDBH: parseNum(circoDBH),
-        hauteurTotale: parseNum(hauteur),
-        etatSanitaire,
+        typeSujet: draft.typeSujet,
+        espece: especeNom,
+        especeId: especeIdVal,
+        especeLibre: especeLibreVal,
+        emetOmbre: emetOmbreVal,
+        circonference30cm: circoMode === 'CM' ? parseNum(draft.circoValue) : undefined,
+        circonferenceDBH: circoMode === 'DBH' ? parseNum(draft.circoValue) : undefined,
+        hauteurTotale: parseNum(draft.hauteur),
+        etatSanitaire: draft.etatSanitaire,
+        maladieId: maladieIdVal,
+        maladieLibre: maladieLibreVal,
+        photoMaladie:
+          draft.etatSanitaire === EtatSanitaire.MALADE ? draft.photoMaladie ?? undefined : undefined,
       },
     ]);
-    // Réinitialise le formulaire de mesure pour la saisie suivante (mode lot).
-    setEspece('');
-    setCirco30('');
-    setCircoDBH('');
-    setHauteur('');
+    // Vide le brouillon de CETTE sous-placette pour la mesure suivante, en
+    // conservant le type de sujet et l'unité (mode lot : l'agent enchaîne les
+    // cacaoyers, puis les arbres).
+    patchDraft({
+      ...DRAFT_VIDE,
+      typeSujet: draft.typeSujet,
+      circoMode: draft.circoMode,
+    });
   };
 
   /** Affiche l'erreur en inline (sous le formulaire) et en toast. */
@@ -144,51 +490,155 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         return;
       }
     }
+    if (currentStep === 2) {
+      // Bornes de plausibilité : mêmes valeurs que celles appliquées par le
+      // backend, signalées ici pendant que l'agent est encore devant le champ.
+      const erreur =
+        verifieBorne(anneeParcelle, LIMITES.anneeParcelle, "Année d'installation") ??
+        verifieBorne(superficie, LIMITES.superficieHa, 'Superficie') ??
+        verifieBorne(productionEstimee, LIMITES.productionKgAn, 'Production estimée');
+      if (erreur) {
+        showError(erreur);
+        return;
+      }
+
+      // B4.1 / B4.2 : le questionnaire exige la précision quand la case est cochée.
+      if (pratiquesRetenues.includes(PratiqueRetenue.AUCUNE) && !aucunePrecision.trim()) {
+        showError('B4.1 — précisez les pratiques non listées (« Aucune pratique » est cochée).');
+        return;
+      }
+      if (pratiquesRetenues.includes(PratiqueRetenue.AUTRES) && !autresPrecision.trim()) {
+        showError('B4.2 — précisez les pratiques non listées (« Autres » est cochée).');
+        return;
+      }
+
+      // Nombre de fois par an, volet par volet : on nomme le volet fautif pour
+      // que l'agent sache quel onglet corriger.
+      for (const volet of voletsCoches) {
+        const err = verifieBorne(
+          voletsDetail[volet].nombreFoisParAn,
+          LIMITES.frequenceAn,
+          `${PRATIQUE_RETENUE_LABELS[volet]} — nombre de fois par an`,
+        );
+        if (err) {
+          setVoletActif(volet);
+          showError(err);
+          return;
+        }
+      }
+    }
     if (currentStep === 3) {
-      if (!delegation.trim()) {
-        showError('La délégation régionale est obligatoire.');
+      if (!delegationId) {
+        showError('Sélectionnez la délégation.');
+        return;
+      }
+      if (!villeId) {
+        showError('Sélectionnez la ville.');
         return;
       }
     }
-    if (currentStep < 4) setCurrentStep((prev) => (prev + 1) as never);
+    if (currentStep === 4) {
+      const ordres = new Set(sommetsOnly.map((s) => s.ordreSommet));
+      if (sommetsOnly.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
+        showError('Capturez les 4 sommets (S1–S4) de la placette avant de continuer.');
+        return;
+      }
+    }
+    if (currentStep < 5) setCurrentStep((prev) => (prev + 1) as never);
+  };
+
+  /**
+   * Construit le détail B4 à envoyer : une entrée par volet coché.
+   * Les précisions « Autres » ne partent que si la case qui les ouvre est bien
+   * cochée — sinon le backend les refuse, à juste titre (donnée orpheline).
+   */
+  const buildPratiques = (): PratiqueCulturaleLocal[] | undefined => {
+    if (!voletsCoches.length) return undefined;
+    return voletsCoches.map((volet) => {
+      const d = voletsDetail[volet];
+      return {
+        volet,
+        types: d.types,
+        typesAutre: d.types.includes('AUTRES') ? d.typesAutre.trim() || undefined : undefined,
+        agents: d.agents,
+        agentsAutre: d.agents.includes(AgentPratiquant.AUTRE)
+          ? d.agentsAutre.trim() || undefined
+          : undefined,
+        frequence: d.frequence ?? undefined,
+        frequenceAutre:
+          d.frequence === FrequencePratique.AUTRE ? d.frequenceAutre.trim() || undefined : undefined,
+        nombreFoisParAn: parseNum(d.nombreFoisParAn),
+      };
+    });
   };
 
   const buildSousPlacettes = (): SousPlacetteLocal[] => {
-    const grouped = new Map<number, MesureArbreLocal[]>();
-    for (const m of mesuresCollectees) {
-      const list = grouped.get(m.numeroSP) || [];
-      list.push({
-        id: '', // réattribué par la couche de stockage
-        sousPlacetteId: '',
-        typeSujet: m.typeSujet,
-        espece: m.espece,
-        circonference30cm: m.circonference30cm,
-        circonferenceDBH: m.circonferenceDBH,
-        hauteurTotale: m.hauteurTotale,
-        etatSanitaire: m.etatSanitaire,
-        createdAt: new Date().toISOString(),
-      });
-      grouped.set(m.numeroSP, list);
+    // Sous-placettes = tout SP ayant des mesures OU un compteur renseigné.
+    const spNums = new Set<number>();
+    mesuresCollectees.forEach((m) => spNums.add(m.numeroSP));
+    for (const k of Object.keys(nombrePlantsBySP)) {
+      if (parseNum(nombrePlantsBySP[+k]) !== undefined) spNums.add(+k);
     }
+    for (const k of Object.keys(nombreArbresBySP)) {
+      if (parseNum(nombreArbresBySP[+k]) !== undefined) spNums.add(+k);
+    }
+
     // Approximation : la sous-placette hérite des 3 premiers sommets de la
-    // placette (échantillon interne) — suffisant pour la validation backend
-    // tant que la capture GPS dédiée par sous-placette n'est pas implémentée.
-    return Array.from(grouped.entries()).map(([numero, mesures]) => ({
+    // placette (échantillon interne) tant que la capture GPS dédiée par
+    // sous-placette n'est pas implémentée.
+    return Array.from(spNums).map((numero) => ({
       id: '',
       placetteId: '',
       numero,
-      sommets: sommets.slice(0, 3),
-      mesures,
+      nombrePlantsCacao: parseNum(nombrePlantsBySP[numero] ?? ''),
+      nombreArbres: parseNum(nombreArbresBySP[numero] ?? ''),
+      sommets: sommetsOnly.slice(0, 3),
+      mesures: mesuresCollectees
+        .filter((m) => m.numeroSP === numero)
+        .map((m) => ({
+          id: '',
+          sousPlacetteId: '',
+          typeSujet: m.typeSujet,
+          espece: m.espece,
+          especeId: m.especeId,
+          especeLibre: m.especeLibre,
+          emetOmbre: m.emetOmbre,
+          circonference30cm: m.circonference30cm,
+          circonferenceDBH: m.circonferenceDBH,
+          hauteurTotale: m.hauteurTotale,
+          etatSanitaire: m.etatSanitaire,
+          maladieId: m.maladieId,
+          maladieLibre: m.maladieLibre,
+          photoMaladie: m.photoMaladie,
+          createdAt: new Date().toISOString(),
+        })),
     }));
   };
 
   const handleFinishSurvey = async () => {
     // Validation des sommets de la placette (exactement 4 pour délimiter la parcelle).
-    const ordres = new Set(sommets.map((s) => s.ordreSommet));
-    if (sommets.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
-      toast.error('Capturez les 4 sommets de la placette (étape C) avant de valider.');
-      setCurrentStep(3);
+    const ordres = new Set(sommetsOnly.map((s) => s.ordreSommet));
+    if (sommetsOnly.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
+      toast.error('Capturez les 4 sommets de la placette (étape C. GPS) avant de valider.');
+      setCurrentStep(4);
       return;
+    }
+
+    // Comptages par sous-placette : un chiffre aberrant est bloqué ici plutôt
+    // que rejeté à la synchronisation, quand l'agent a quitté la parcelle.
+    for (const [libelle, table] of [
+      ['Nombre de cacaoyers', nombrePlantsBySP],
+      ["Nombre d'arbres", nombreArbresBySP],
+    ] as const) {
+      for (const [sp, valeur] of Object.entries(table)) {
+        const erreur = verifieBorne(valeur, LIMITES.comptageSP, `${libelle} (SP${sp})`);
+        if (erreur) {
+          toast.error(erreur);
+          setSelectedSP(Number(sp));
+          setCurrentStep(5);
+          return;
+        }
+      }
     }
 
     setSaving(true);
@@ -197,6 +647,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         producteur: {
           nom: nom.trim(),
           prenoms: prenoms.trim(),
+          genre: genre ?? undefined,
+          trancheAge: trancheAge ?? undefined,
           identiteProprietaire: identite.trim() || undefined,
           consentementDonne: rgpdConsent,
           consentementDate: new Date().toISOString(),
@@ -204,16 +656,32 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         parcelle: {
           anneeParcelle: parseNum(anneeParcelle),
           superficie: parseNum(superficie),
-          typeEntretien: entretienType.trim() || undefined,
-          maladiesObservees: maladies.trim() || undefined,
+          // Bloc B4 : cases de tête + détail des volets cochés.
+          pratiquesRetenues: pratiquesRetenues.length ? pratiquesRetenues : undefined,
+          aucunePratiquePrecision: pratiquesRetenues.includes(PratiqueRetenue.AUCUNE)
+            ? aucunePrecision.trim() || undefined
+            : undefined,
+          autresPratiquesPrecision: pratiquesRetenues.includes(PratiqueRetenue.AUTRES)
+            ? autresPrecision.trim() || undefined
+            : undefined,
+          pratiques: buildPratiques(),
+          // Libellés du référentiel, séparés par « ; ».
+          maladiesObservees: maladiesParcelle.length ? maladiesParcelle.join(' ; ') : undefined,
+          maladiesNonListees: maladiesAutre.trim() || undefined,
           productionEstimee: parseNum(productionEstimee),
-          uniteProduction: 'kg / an',
+          uniteProduction: UniteProduction.KG_PAR_AN,
         },
         placette: {
-          numeroPlacette,
-          delegationRegionale: delegation.trim(),
+          // Aperçu local ; le serveur attribuera le numéro définitif à la synchro.
+          numeroPlacette: numeroApercu ?? 'PLC-PROVISOIRE',
+          delegationRegionale: selectedDelegation?.nom ?? '',
+          delegationId: delegationId ?? undefined,
+          villeId: villeId ?? undefined,
+          ville: selectedVille?.nom,
           village: village.trim() || undefined,
-          sommets,
+          chefEquipe: chefEquipe.trim() || undefined,
+          dateInventaire: collecteDate.toISOString(),
+          sommets: points,
           sousPlacettes: buildSousPlacettes(),
         },
       });
@@ -235,8 +703,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   return (
     <View style={styles.container}>
       <Header
-        title="Formulaire d'Inventaire"
-        subtitle="Collecte terrain producteur (Blocs A, B, C & D)"
+        title="Nouvelle collecte"
+        subtitle="Producteur & parcelle"
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
         avatarUri={user?.avatarUri}
@@ -251,10 +719,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
       <View style={[styles.stepsContainer, { paddingHorizontal }, contentStyle]}>
         {[
-          { step: 1, label: 'A. Producteur' },
-          { step: 2, label: 'B. Pratiques' },
-          { step: 3, label: 'C. GPS Placette' },
-          { step: 4, label: 'D. Mesures' },
+          { step: 1, label: 'A. Prod.' },
+          { step: 2, label: 'B. Prat.' },
+          { step: 3, label: 'C. Infos' },
+          { step: 4, label: 'C. GPS' },
+          { step: 5, label: 'D. Mes.' },
         ].map((item) => {
           const isActive = currentStep === item.step;
           const isDone = currentStep > item.step;
@@ -264,7 +733,13 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               style={[styles.stepItem, isActive && styles.stepActive, isDone && styles.stepDone]}
               onPress={() => setCurrentStep(item.step as never)}
             >
-              <Text style={[styles.stepText, (isActive || isDone) && styles.stepTextActive]}>
+              <Text
+                style={[
+                  styles.stepText,
+                  isActive && styles.stepTextActive,
+                  isDone && !isActive && styles.stepTextDone,
+                ]}
+              >
                 {item.label}
               </Text>
             </TouchableOpacity>
@@ -305,6 +780,61 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               />
             </View>
 
+            {/* Genre (optionnel) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Genre <Text style={styles.optionalTag}>(optionnel)</Text></Text>
+              <View style={styles.chipsWrap}>
+                {[
+                  { v: Genre.MASCULIN, label: 'Masculin' },
+                  { v: Genre.FEMININ, label: 'Féminin' },
+                ].map((opt) => {
+                  const active = genre === opt.v;
+                  return (
+                    <TouchableOpacity
+                      key={opt.v}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => setGenre(active ? null : opt.v)}
+                      activeOpacity={0.8}
+                    >
+                      {active && (
+                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                      )}
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Tranche d'âge (optionnel) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>
+                Tranche d'âge <Text style={styles.optionalTag}>(optionnel)</Text>
+              </Text>
+              <View style={styles.chipsWrap}>
+                {Object.values(TrancheAge).map((t) => {
+                  const active = trancheAge === t;
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => setTrancheAge(active ? null : t)}
+                      activeOpacity={0.8}
+                    >
+                      {active && (
+                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                      )}
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {TRANCHE_AGE_LABELS[t]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>N° Pièce d'Identité / CNI</Text>
               <TextInput
@@ -343,12 +873,16 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               <Text style={styles.inputLabel}>Année d'installation de la parcelle</Text>
               <TextInput
                 style={styles.textInput}
-                keyboardType="numeric"
+                keyboardType="number-pad"
                 placeholder="ex: 2016"
                 placeholderTextColor={colors.textMuted}
                 value={anneeParcelle}
-                onChangeText={setAnneeParcelle}
+                // Une année = 4 chiffres, rien d'autre.
+                onChangeText={(t) => setAnneeParcelle(sanitizeEntier(t, 4))}
               />
+              <Text style={styles.helperText}>
+                Entre {LIMITES.anneeParcelle.min} et {LIMITES.anneeParcelle.max}
+              </Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -359,29 +893,252 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 placeholder="ex: 3.5"
                 placeholderTextColor={colors.textMuted}
                 value={superficie}
-                onChangeText={setSuperficie}
+                onChangeText={(t) => setSuperficie(sanitizeDecimal(t))}
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Pratiques d'entretien principales</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="ex: Désherbage manuel"
-                placeholderTextColor={colors.textMuted}
-                value={entretienType}
-                onChangeText={setEntretienType}
-              />
-            </View>
+            {/* ---------- B4 — Pratiques culturales ---------- */}
+            <View style={styles.divider} />
+            <Text style={styles.sectionMini}>B4 — Pratiques culturales</Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Maladies & Attaques observées</Text>
+              <Text style={styles.inputLabel}>
+                Pratiques déclarées{' '}
+                <Text style={styles.optionalTag}>(plusieurs réponses possibles)</Text>
+              </Text>
+              <View style={styles.chipsWrap}>
+                {Object.values(PratiqueRetenue).map((p) => {
+                  const active = pratiquesRetenues.includes(p);
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => togglePratiqueRetenue(p)}
+                      activeOpacity={0.8}
+                    >
+                      {active && (
+                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                      )}
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {PRATIQUE_RETENUE_LABELS[p]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* B4.1 — précision demandée quand « Aucune pratique » est cochée */}
+            {pratiquesRetenues.includes(PratiqueRetenue.AUCUNE) && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>B4.1 — Pratiques non listées *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Précisez ce qui est fait sur la parcelle"
+                  placeholderTextColor={colors.textMuted}
+                  value={aucunePrecision}
+                  onChangeText={setAucunePrecision}
+                  multiline
+                />
+              </View>
+            )}
+
+            {/* B4.2 — précision demandée quand « Autres » est cochée */}
+            {pratiquesRetenues.includes(PratiqueRetenue.AUTRES) && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>B4.2 — Autres pratiques *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Précisez les pratiques non listées"
+                  placeholderTextColor={colors.textMuted}
+                  value={autresPrecision}
+                  onChangeText={setAutresPrecision}
+                  multiline
+                />
+              </View>
+            )}
+
+            {/* Détail par volet : onglets, comme les sous-placettes du Bloc D.
+                Seuls les volets cochés ci-dessus apparaissent. */}
+            {voletCourant && detailCourant && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Détail par pratique</Text>
+                {voletsCoches.length > 1 && (
+                  <View style={styles.spSelector}>
+                    {voletsCoches.map((v) => {
+                      const active = v === voletCourant;
+                      // Un volet est « entamé » dès qu'un type est coché : le
+                      // point permet de repérer un onglet encore vide.
+                      const entame = voletsDetail[v].types.length > 0;
+                      return (
+                        <TouchableOpacity
+                          key={v}
+                          style={[styles.spButton, active && styles.spButtonActive]}
+                          onPress={() => setVoletActif(v)}
+                        >
+                          <Text style={[styles.spText, active && styles.spTextActive]}>
+                            {PRATIQUE_RETENUE_LABELS[v]}
+                            {entame ? ' •' : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Types de pratiques — options propres au volet */}
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Types de pratiques</Text>
+                <View style={styles.chipsWrap}>
+                  {TYPES_PAR_VOLET[voletCourant].map((t) => {
+                    const active = detailCourant.types.includes(t.code);
+                    return (
+                      <TouchableOpacity
+                        key={t.code}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => patchVolet({ types: toggleDansListe(detailCourant.types, t.code) })}
+                        activeOpacity={0.8}
+                      >
+                        {active && (
+                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        )}
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {t.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {detailCourant.types.includes('AUTRES') && (
+                  <TextInput
+                    style={[styles.textInput, { marginTop: 8 }]}
+                    placeholder="Autres types de pratiques (préciser)"
+                    placeholderTextColor={colors.textMuted}
+                    value={detailCourant.typesAutre}
+                    onChangeText={(t) => patchVolet({ typesAutre: t })}
+                  />
+                )}
+
+                {/* Agent(s) pratiquant(s) */}
+                <Text style={[styles.inputLabel, { marginTop: 16 }]}>Agent(s) pratiquant(s)</Text>
+                <View style={styles.chipsWrap}>
+                  {Object.values(AgentPratiquant).map((a) => {
+                    const active = detailCourant.agents.includes(a);
+                    return (
+                      <TouchableOpacity
+                        key={a}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => patchVolet({ agents: toggleDansListe(detailCourant.agents, a) })}
+                        activeOpacity={0.8}
+                      >
+                        {active && (
+                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        )}
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {AGENT_PRATIQUANT_LABELS[a]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {detailCourant.agents.includes(AgentPratiquant.AUTRE) && (
+                  <TextInput
+                    style={[styles.textInput, { marginTop: 8 }]}
+                    placeholder="Autre(s) agent(s) (préciser)"
+                    placeholderTextColor={colors.textMuted}
+                    value={detailCourant.agentsAutre}
+                    onChangeText={(t) => patchVolet({ agentsAutre: t })}
+                  />
+                )}
+
+                {/* Fréquence — choix unique */}
+                <Text style={[styles.inputLabel, { marginTop: 16 }]}>Fréquence</Text>
+                <View style={styles.chipsWrap}>
+                  {Object.values(FrequencePratique).map((f) => {
+                    const active = detailCourant.frequence === f;
+                    return (
+                      <TouchableOpacity
+                        key={f}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() =>
+                          patchVolet({
+                            frequence: active ? null : f,
+                            // Une précision n'a plus de sens hors « Autres ».
+                            frequenceAutre: f === FrequencePratique.AUTRE ? detailCourant.frequenceAutre : '',
+                          })
+                        }
+                        activeOpacity={0.8}
+                      >
+                        {active && (
+                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        )}
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {FREQUENCE_PRATIQUE_LABELS[f]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {detailCourant.frequence === FrequencePratique.AUTRE && (
+                  <TextInput
+                    style={[styles.textInput, { marginTop: 8 }]}
+                    placeholder="Autre fréquence (préciser)"
+                    placeholderTextColor={colors.textMuted}
+                    value={detailCourant.frequenceAutre}
+                    onChangeText={(t) => patchVolet({ frequenceAutre: t })}
+                  />
+                )}
+
+                {/* Nombre de fois par an */}
+                <View style={[styles.inputGroup, { marginTop: 16 }]}>
+                  <Text style={styles.inputLabel}>Nombre de fois par an</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    keyboardType="number-pad"
+                    placeholder="ex: 4"
+                    placeholderTextColor={colors.textMuted}
+                    value={detailCourant.nombreFoisParAn}
+                    onChangeText={(t) => patchVolet({ nombreFoisParAn: sanitizeEntier(t, 2) })}
+                  />
+                  <Text style={styles.helperText}>Maximum {LIMITES.frequenceAn.max} par an</Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.divider} />
+
+            {/* Maladies observées : mêmes valeurs que le Bloc D (référentiel) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>
+                Maladies & attaques observées{' '}
+                <Text style={styles.optionalTag}>(plusieurs choix possibles)</Text>
+              </Text>
+              <View style={styles.chipsWrap}>
+                {maladieOptions.map((o) => {
+                  const active = maladiesParcelle.includes(o.nom);
+                  return (
+                    <TouchableOpacity
+                      key={o.key}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => toggleMaladieParcelle(o.nom)}
+                      activeOpacity={0.8}
+                    >
+                      {active && (
+                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                      )}
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.nom}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={[styles.optionalTag, { marginTop: 8 }]}>
+                Autre constat, absent de la liste
+              </Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="ex: Swollen Shoot"
+                placeholder="ex: dessèchement inexpliqué des cabosses"
                 placeholderTextColor={colors.textMuted}
-                value={maladies}
-                onChangeText={setMaladies}
+                value={maladiesAutre}
+                onChangeText={setMaladiesAutre}
               />
             </View>
 
@@ -389,12 +1146,15 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               <Text style={styles.inputLabel}>Estimation de Production (kg/an)</Text>
               <TextInput
                 style={styles.textInput}
-                keyboardType="numeric"
+                keyboardType="number-pad"
                 placeholder="ex: 1400"
                 placeholderTextColor={colors.textMuted}
                 value={productionEstimee}
-                onChangeText={setProductionEstimee}
+                onChangeText={(t) => setProductionEstimee(sanitizeEntier(t, 6))}
               />
+              <Text style={styles.helperText}>
+                Maximum {LIMITES.productionKgAn.max.toLocaleString('fr-FR')} kg par an
+              </Text>
             </View>
           </View>
         )}
@@ -402,38 +1162,94 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* BLOC C */}
         {currentStep === 3 && (
           <View>
-            <CompassGPSGauge
-              sommets={sommets}
-              activeSommetOrdre={activeSommet}
-              onCaptureSommet={handleCaptureGPS}
-              areaInHectares={LocationService.calculateAreaInHectares(sommets)}
-            />
-
             <View style={styles.stepCard}>
-              <Text style={styles.blocTitle}>Bloc C — Détails de la Placette</Text>
+              <Text style={styles.blocTitle}>Bloc C — Localisation de la placette</Text>
+              <Text style={styles.blocSub}>
+                Renseignez la zone pour générer le numéro, puis relevez les sommets GPS.
+              </Text>
 
+              {/* 1. Délégation (référentiel paramétrable, mis en cache) */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Numéro de Placette *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={numeroPlacette}
-                  onChangeText={setNumeroPlacette}
-                />
+                <View style={styles.fieldHead}>
+                  <View style={styles.stepBadge}>
+                    <Text style={styles.stepBadgeText}>1</Text>
+                  </View>
+                  <Text style={styles.inputLabel}>Délégation</Text>
+                </View>
+                {delegations.length === 0 ? (
+                  <View style={styles.emptyRef}>
+                    <Feather name="wifi-off" size={14} color={colors.textSecondary} />
+                    <Text style={styles.emptyRefText}>
+                      Référentiel indisponible — connectez-vous une première fois.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.chipsWrap}>
+                    {delegations.map((d) => {
+                      const active = d.id === delegationId;
+                      return (
+                        <TouchableOpacity
+                          key={d.id}
+                          style={[styles.chip, active && styles.chipActive]}
+                          onPress={() => {
+                            setDelegationId(d.id);
+                            setVilleId(null);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          {active && (
+                            <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                          )}
+                          <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                            {d.nom}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Délégation Régionale *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="ex: San-Pédro"
-                  placeholderTextColor={colors.textMuted}
-                  value={delegation}
-                  onChangeText={setDelegation}
-                />
-              </View>
+              {/* 2. Ville (filtrée par la délégation choisie) */}
+              {selectedDelegation && (
+                <View style={styles.inputGroup}>
+                  <View style={styles.fieldHead}>
+                    <View style={styles.stepBadge}>
+                      <Text style={styles.stepBadgeText}>2</Text>
+                    </View>
+                    <Text style={styles.inputLabel}>Ville</Text>
+                  </View>
+                  <View style={styles.chipsWrap}>
+                    {selectedDelegation.villes.map((v) => {
+                      const active = v.id === villeId;
+                      return (
+                        <TouchableOpacity
+                          key={v.id}
+                          style={[styles.chip, active && styles.chipActive]}
+                          onPress={() => setVilleId(v.id)}
+                          activeOpacity={0.8}
+                        >
+                          {active && (
+                            <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                          )}
+                          <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                            {v.nom}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
+              {/* 3. Village libre */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Village / Localité</Text>
+                <View style={styles.fieldHead}>
+                  <View style={styles.stepBadge}>
+                    <Text style={styles.stepBadgeText}>3</Text>
+                  </View>
+                  <Text style={styles.inputLabel}>Village / Localité</Text>
+                </View>
                 <TextInput
                   style={styles.textInput}
                   placeholder="ex: Grand-Zattry"
@@ -443,16 +1259,91 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 />
               </View>
 
-              <Text style={styles.helperText}>
-                {sommets.length}/4 sommets capturés{' '}
-                {sommets.length === 4 ? '✓ Parcelle délimitée (4 sommets)' : '— capture requise'}
-              </Text>
+              {/* Identification de la collecte : chef d'équipe + date auto */}
+              <View style={styles.divider} />
+              <Text style={styles.sectionMini}>Identification de la collecte</Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Chef d'équipe</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Nom complet du chef d'équipe"
+                  placeholderTextColor={colors.textMuted}
+                  value={chefEquipe}
+                  onChangeText={setChefEquipe}
+                />
+              </View>
+
+              <View style={styles.dateRow}>
+                <View style={styles.dateIcon}>
+                  <Feather name="calendar" size={15} color={colors.emeraldPrimary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dateLabel}>Date de collecte</Text>
+                  <Text style={styles.dateValue}>{dateCollecteLabel}</Text>
+                </View>
+                <View style={styles.autoPill}>
+                  <Text style={styles.autoPillText}>AUTO</Text>
+                </View>
+              </View>
+
+              {/* Carte numéro de placette (aperçu) */}
+              <LinearGradient
+                colors={[colors.forestLight, colors.emeraldPrimary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.numeroCard}
+              >
+                <View style={styles.numeroTop}>
+                  <View style={styles.numeroIcon}>
+                    <Feather name="hash" size={15} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.numeroCardLabel}>Numéro de placette</Text>
+                  {numeroApercu && (
+                    <View style={styles.apercuPill}>
+                      <Text style={styles.apercuPillText}>APERÇU</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.numeroCardValue}>{numeroApercu ?? 'D-•••-•••-•••'}</Text>
+                <Text style={styles.numeroCardHint}>
+                  {numeroApercu
+                    ? 'Numéro définitif attribué automatiquement à la synchronisation.'
+                    : 'Choisissez la délégation et la ville pour obtenir le numéro.'}
+                </Text>
+              </LinearGradient>
             </View>
           </View>
         )}
 
-        {/* BLOC D */}
+        {/* BLOC C — Étape 2 : relevé GPS des sommets (après obtention du numéro) */}
         {currentStep === 4 && (
+          <View>
+            <View style={styles.stepCard}>
+              <Text style={styles.blocTitle}>Bloc C — Sommets GPS</Text>
+              <Text style={styles.blocSub}>
+                Placette {numeroApercu ?? ''} — relevez les 4 sommets qui délimitent la parcelle.
+              </Text>
+            </View>
+            <PlacettePointsCapture
+              points={points}
+              onCapture={handleCapturePoint}
+              onManualEdit={handleEditPoint}
+              canEdit={canEditPoints}
+              capturing={capturing}
+              areaInHectares={LocationService.calculateAreaInHectares(sommetsOnly)}
+            />
+            <Text style={styles.helperText}>
+              {sommetsOnly.length}/4 sommets (S) requis{' '}
+              {sommetsOnly.length === 4
+                ? '✓ Parcelle délimitée'
+                : '— capturez S1 à S4 pour continuer'}
+            </Text>
+          </View>
+        )}
+
+        {/* BLOC D */}
+        {currentStep === 5 && (
           <View style={styles.stepCard}>
             <Text style={styles.blocTitle}>Bloc D — Mesures Dendrométriques</Text>
             <Text style={styles.blocSub}>Comptage et circonférence par sous-placette</Text>
@@ -478,81 +1369,245 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
             <View style={styles.typeSelector}>
               <TouchableOpacity
-                style={[styles.typeBtn, typeSujet === TypeSujet.CACAO && styles.typeBtnActive]}
-                onPress={() => setTypeSujet(TypeSujet.CACAO)}
+                style={[styles.typeBtn, isCacao && styles.typeBtnActive]}
+                // Le changement de type vide la grosseur : passer de cm (cacao) à
+                // DBH en m (arbre) sans effacer laisserait une valeur dans la
+                // mauvaise unité.
+                onPress={() => patchDraft({ typeSujet: TypeSujet.CACAO, circoValue: '' })}
               >
-                <Feather name="box" size={14} color={typeSujet === TypeSujet.CACAO ? '#FFF' : colors.textPrimary} />
-                <Text style={[styles.typeBtnText, typeSujet === TypeSujet.CACAO && styles.typeBtnTextActive]}>
+                <Feather name="box" size={14} color={isCacao ? '#FFF' : colors.textPrimary} />
+                <Text style={[styles.typeBtnText, isCacao && styles.typeBtnTextActive]}>
                   Cacaoyer
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.typeBtn, typeSujet === TypeSujet.ARBRE_OMBRAGE && styles.typeBtnActive]}
-                onPress={() => setTypeSujet(TypeSujet.ARBRE_OMBRAGE)}
+                style={[styles.typeBtn, !isCacao && styles.typeBtnActive]}
+                onPress={() => patchDraft({ typeSujet: TypeSujet.ARBRE_OMBRAGE, circoValue: '' })}
               >
-                <Feather name="sun" size={14} color={typeSujet === TypeSujet.ARBRE_OMBRAGE ? '#FFF' : colors.textPrimary} />
-                <Text style={[styles.typeBtnText, typeSujet === TypeSujet.ARBRE_OMBRAGE && styles.typeBtnTextActive]}>
+                <Feather name="sun" size={14} color={!isCacao ? '#FFF' : colors.textPrimary} />
+                <Text style={[styles.typeBtnText, !isCacao && styles.typeBtnTextActive]}>
                   Arbre d'ombrage
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {typeSujet === TypeSujet.ARBRE_OMBRAGE && (
+            {/* Espèce (arbres uniquement) : liste référentiel + « autre » */}
+            {!isCacao && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Espèce d'arbre d'ombrage *</Text>
+                <Text style={styles.inputLabel}>Espèce de l'arbre *</Text>
+                <View style={styles.chipsWrap}>
+                  {especes.map((e) => {
+                    const active = draft.especeId === e.id;
+                    return (
+                      <TouchableOpacity
+                        key={e.id}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() =>
+                          patchDraft({ especeId: active ? null : e.id, especeAutre: '' })
+                        }
+                        activeOpacity={0.8}
+                      >
+                        {active && (
+                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        )}
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {e.nom}
+                          {!e.emetOmbre ? ' • sans ombre' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.optionalTag, { marginTop: 8 }]}>
+                  Autre espèce (hors liste, non émettrice d'ombre)
+                </Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="ex: Framiré, Akpio, Iroko"
+                  placeholder="Saisir une espèce absente de la liste"
                   placeholderTextColor={colors.textMuted}
-                  value={espece}
-                  onChangeText={setEspece}
+                  value={draft.especeAutre}
+                  onChangeText={(t) => patchDraft({ especeAutre: t, especeId: t ? null : draft.especeId })}
                 />
               </View>
             )}
 
-            <View style={styles.rowInputs}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Circonf. 30 cm (cm)</Text>
-                <TextInput
-                  style={styles.textInput}
-                  keyboardType="numeric"
-                  value={circo30}
-                  onChangeText={setCirco30}
-                />
-              </View>
-
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Circonf. DBH 1.3m (cm)</Text>
-                <TextInput
-                  style={styles.textInput}
-                  keyboardType="numeric"
-                  value={circoDBH}
-                  onChangeText={setCircoDBH}
-                />
-              </View>
+            {/* Grosseur du sujet : cacaoyer = cm OU DBH (m) ; arbre = DBH (m) seul */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{isCacao ? 'Circonférence' : 'DBH (m)'}</Text>
+              {isCacao ? (
+                <View style={styles.segment}>
+                  <TouchableOpacity
+                    style={[styles.segmentBtn, circoMode === 'CM' && styles.segmentBtnActive]}
+                    onPress={() => patchDraft({ circoMode: 'CM', circoValue: '' })}
+                  >
+                    <Text
+                      style={[styles.segmentText, circoMode === 'CM' && styles.segmentTextActive]}
+                    >
+                      cm
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.segmentBtn, circoMode === 'DBH' && styles.segmentBtnActive]}
+                    onPress={() => patchDraft({ circoMode: 'DBH', circoValue: '' })}
+                  >
+                    <Text
+                      style={[styles.segmentText, circoMode === 'DBH' && styles.segmentTextActive]}
+                    >
+                      DBH (m)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={styles.helperText}>
+                  Mesure unique pour un arbre d'ombrage : DBH à 1,30 m, en mètres.
+                </Text>
+              )}
+              <TextInput
+                style={styles.textInput}
+                keyboardType="decimal-pad"
+                placeholder={circoMode === 'CM' ? 'Circonférence en cm' : 'DBH en mètres'}
+                placeholderTextColor={colors.textMuted}
+                value={draft.circoValue}
+                onChangeText={(t) => patchDraft({ circoValue: sanitizeDecimal(t) })}
+              />
+              <Text style={styles.helperText}>
+                Entre {limiteCirco.min} et {limiteCirco.max} {limiteCirco.unite}
+              </Text>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Hauteur Totale (mètres)</Text>
+              <Text style={styles.inputLabel}>Hauteur totale (m)</Text>
               <TextInput
                 style={styles.textInput}
-                keyboardType="numeric"
-                value={hauteur}
-                onChangeText={setHauteur}
+                keyboardType="decimal-pad"
+                placeholder="ex: 4.5"
+                placeholderTextColor={colors.textMuted}
+                value={draft.hauteur}
+                onChangeText={(t) => patchDraft({ hauteur: sanitizeDecimal(t) })}
               />
             </View>
 
+            {/* État de santé */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>État de santé</Text>
+              <View style={styles.chipsWrap}>
+                {Object.values(EtatSanitaire).map((et) => {
+                  const active = draft.etatSanitaire === et;
+                  return (
+                    <TouchableOpacity
+                      key={et}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => patchDraft({ etatSanitaire: et })}
+                      activeOpacity={0.8}
+                    >
+                      {active && (
+                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                      )}
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {ETAT_SANITAIRE_LABELS[et]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* MALADE : maladie (liste + autre) + photo obligatoire */}
+            {draft.etatSanitaire === EtatSanitaire.MALADE && (
+              <View style={styles.maladieBox}>
+                <Text style={styles.inputLabel}>Maladie *</Text>
+                <View style={styles.chipsWrap}>
+                  {maladieOptions.map((o) => {
+                    const active = draft.maladieKey === o.key;
+                    return (
+                      <TouchableOpacity
+                        key={o.key}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() =>
+                          patchDraft({ maladieKey: active ? null : o.key, maladieAutre: '' })
+                        }
+                        activeOpacity={0.8}
+                      >
+                        {active && (
+                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        )}
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.nom}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.optionalTag, { marginTop: 8 }]}>
+                  Maladie absente de la liste ? Saisissez-la : elle sera proposée à tous les agents
+                  après validation par l'administration.
+                </Text>
+                <TextInput
+                  style={[styles.textInput, { marginTop: 6 }]}
+                  placeholder="Autre maladie (préciser)"
+                  placeholderTextColor={colors.textMuted}
+                  value={draft.maladieAutre}
+                  onChangeText={(t) =>
+                    patchDraft({ maladieAutre: t, maladieKey: t ? null : draft.maladieKey })
+                  }
+                />
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Photo de diagnostic *</Text>
+                {draft.photoMaladie ? (
+                  <View style={styles.photoRow}>
+                    <Image source={{ uri: draft.photoMaladie }} style={styles.photoThumb} />
+                    <TouchableOpacity style={styles.photoRetake} onPress={handleCapturePhotoMaladie}>
+                      <Feather name="refresh-cw" size={14} color={colors.emeraldPrimary} />
+                      <Text style={styles.photoRetakeText}>Reprendre</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.photoBtn} onPress={handleCapturePhotoMaladie}>
+                    <Feather name="camera" size={16} color={colors.emeraldPrimary} />
+                    <Text style={styles.photoBtnText}>Ajouter la photo (obligatoire)</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             <TouchableOpacity style={styles.addMesureBtn} onPress={handleAddMesure}>
               <Feather name="plus-circle" size={16} color={colors.emeraldPrimary} />
-              <Text style={styles.addMesureText}>Ajouter cette mesure à SP{selectedSP}</Text>
+              <Text style={styles.addMesureText}>
+                Ajouter {isCacao ? 'ce cacaoyer' : 'cet arbre'} à SP{selectedSP}
+              </Text>
             </TouchableOpacity>
+            {isCacao && selectedSP !== 1 && (
+              <Text style={styles.helperText}>{cacaoCountForSP}/3 cacaoyers (maximum SP2–SP6)</Text>
+            )}
+
+            {/* Comptage de la sous-placette : uniquement celui du type de sujet
+                sélectionné, pour ne pas demander à l'agent un chiffre qui ne
+                concerne pas ce qu'il est en train de relever. Les deux valeurs
+                restent mémorisées par SP et partent ensemble à l'enregistrement. */}
+            <View style={[styles.inputGroup, { marginTop: 16 }]}>
+              <Text style={styles.inputLabel}>
+                {isCacao ? 'Nombre de cacaoyers (SP' : "Nombre d'arbres (SP"}
+                {selectedSP})
+              </Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="number-pad"
+                placeholder={isCacao ? 'ex: 120' : 'ex: 8'}
+                placeholderTextColor={colors.textMuted}
+                value={(isCacao ? nombrePlantsBySP : nombreArbresBySP)[selectedSP] ?? ''}
+                onChangeText={(t) => {
+                  // Comptage = entier positif : la frappe est filtrée à la source.
+                  const v = sanitizeEntier(t, 4);
+                  if (isCacao) setNombrePlantsBySP((p) => ({ ...p, [selectedSP]: v }));
+                  else setNombreArbresBySP((p) => ({ ...p, [selectedSP]: v }));
+                }}
+              />
+            </View>
 
             {/* Mesures déjà saisies pour la sous-placette sélectionnée */}
             {mesuresPourSP.length > 0 && (
               <View style={styles.mesuresList}>
                 <Text style={styles.mesuresListTitle}>
-                  {mesuresPourSP.length} mesure(s) enregistrée(s) pour SP{selectedSP}
+                  {mesuresPourSP.length} mesure(s) — SP{selectedSP}
                 </Text>
                 {mesuresPourSP.map((m, i) => (
                   <View key={i} style={styles.mesureChip}>
@@ -563,8 +1618,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                     />
                     <Text style={styles.mesureChipText}>
                       {m.typeSujet === TypeSujet.CACAO ? 'Cacaoyer' : m.espece || 'Arbre'}
-                      {m.circonferenceDBH ? ` • DBH ${m.circonferenceDBH}cm` : ''}
-                      {m.hauteurTotale ? ` • ${m.hauteurTotale}m` : ''}
+                      {m.circonference30cm ? ` • ${m.circonference30cm} cm` : ''}
+                      {m.circonferenceDBH ? ` • DBH ${m.circonferenceDBH} m` : ''}
+                      {m.hauteurTotale ? ` • ${m.hauteurTotale} m` : ''}
+                      {` • ${ETAT_SANITAIRE_LABELS[m.etatSanitaire]}`}
                     </Text>
                   </View>
                 ))}
@@ -593,7 +1650,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             </TouchableOpacity>
           )}
 
-          {currentStep < 4 ? (
+          {currentStep < 5 ? (
             <TouchableOpacity style={styles.nextBtn} onPress={handleNextStep}>
               <Text style={styles.nextBtnText}>Étape Suivante</Text>
               <Feather name="arrow-right" size={18} color={colors.textLight} />
@@ -643,15 +1700,22 @@ const styles = StyleSheet.create({
   },
   stepDone: {
     backgroundColor: colors.mintBadge,
+    borderWidth: 1,
+    borderColor: colors.emeraldPrimary,
   },
   stepText: {
     fontSize: 10.5,
     fontWeight: '600',
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   stepTextActive: {
     color: colors.textLight,
     fontWeight: '700',
+  },
+  stepTextDone: {
+    color: colors.emeraldPrimary,
+    fontWeight: '800',
   },
   scrollView: {
     flex: 1,
@@ -687,6 +1751,72 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
+  optionalTag: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textMuted,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  sectionMini: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 4,
+  },
+  dateIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: colors.mintBadge,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  dateValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 1,
+  },
+  autoPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: colors.mintBadge,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  autoPillText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: colors.emeraldPrimary,
+  },
   textInput: {
     backgroundColor: colors.backgroundLight,
     borderRadius: 12,
@@ -702,6 +1832,127 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 4,
+  },
+  fieldHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.mintBadge,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  stepBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.emeraldPrimary,
+  },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.backgroundLight,
+  },
+  chipActive: {
+    backgroundColor: colors.emeraldPrimary,
+    borderColor: colors.emeraldPrimary,
+  },
+  chipCheck: {
+    marginRight: 5,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  chipTextActive: {
+    color: '#FFFFFF',
+  },
+  emptyRef: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  emptyRefText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  numeroCard: {
+    marginTop: 6,
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: colors.forestDark,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  numeroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  numeroIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numeroCardLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    color: 'rgba(255,255,255,0.85)',
+    textTransform: 'uppercase',
+  },
+  apercuPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  apercuPillText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#FFFFFF',
+  },
+  numeroCardValue: {
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: '#FFFFFF',
+  },
+  numeroCardHint: {
+    marginTop: 6,
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.8)',
   },
   consentCard: {
     flexDirection: 'row',
@@ -782,6 +2033,81 @@ const styles = StyleSheet.create({
   rowInputs: {
     flexDirection: 'row',
     gap: 10,
+  },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  segmentBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  segmentBtnActive: {
+    backgroundColor: colors.emeraldPrimary,
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  segmentTextActive: {
+    color: '#FFFFFF',
+  },
+  maladieBox: {
+    backgroundColor: '#FEF3F2',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    marginBottom: 14,
+    gap: 4,
+  },
+  photoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.mintBadge,
+    borderWidth: 1,
+    borderColor: colors.emeraldPrimary,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  photoBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.emeraldPrimary,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  photoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: colors.borderLight,
+  },
+  photoRetake: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  photoRetakeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.emeraldPrimary,
   },
   addMesureBtn: {
     flexDirection: 'row',
