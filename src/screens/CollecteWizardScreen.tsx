@@ -32,6 +32,7 @@ import {
   TrancheAge,
   TypePoint,
   UniteProduction,
+  StatutCollecte,
   PratiqueRetenue,
   AgentPratiquant,
   FrequencePratique,
@@ -527,72 +528,78 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     toast.error(message);
   };
 
-  const handleNextStep = () => {
-    setErrorMsg(null);
-    if (currentStep === 1) {
-      if (!nom.trim() || !prenoms.trim()) {
-        showError('Veuillez saisir le nom et les prénoms du producteur.');
-        return;
-      }
-      if (!rgpdConsent) {
-        showError('Le consentement RGPD du producteur est obligatoire.');
-        return;
+  /**
+   * Informations requises encore absentes.
+   * Ne bloque JAMAIS la navigation : l'agent renseigne dans l'ordre qui lui
+   * convient sur le terrain. Cette liste conditionne seulement la soumission, et
+   * s'affiche telle quelle pour qu'il sache quoi aller chercher.
+   */
+  const champsManquants = (): string[] => {
+    const manque: string[] = [];
+    if (!nom.trim()) manque.push('Nom du producteur (Bloc A)');
+    if (!prenoms.trim()) manque.push('Prénoms du producteur (Bloc A)');
+    if (!rgpdConsent) manque.push('Consentement du producteur (Bloc A)');
+    if (pratiquesRetenues.includes(PratiqueRetenue.AUCUNE) && !aucunePrecision.trim()) {
+      manque.push('B4.1 — précision « Aucune pratique » (Bloc B)');
+    }
+    if (pratiquesRetenues.includes(PratiqueRetenue.AUTRES) && !autresPrecision.trim()) {
+      manque.push('B4.2 — précision « Autres pratiques » (Bloc B)');
+    }
+    if (!delegationId) manque.push('Délégation (Bloc C)');
+    if (!villeId) manque.push('Ville (Bloc C)');
+    const ordres = new Set(sommetsOnly.map((s) => s.ordreSommet));
+    if (sommetsOnly.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
+      manque.push(`Sommets GPS de la placette (${sommetsOnly.length}/4) — Bloc C`);
+    }
+    return manque;
+  };
+
+  /**
+   * Erreurs de saisie : valeurs hors bornes de plausibilité.
+   * Elles bloquent TOUT enregistrement, brouillon compris — le backend les
+   * refuserait à la synchronisation, et un brouillon impossible à synchroniser
+   * serait un piège silencieux.
+   */
+  const erreursDeSaisie = (): string | null => {
+    const erreur =
+      verifieBorne(anneeParcelle, LIMITES.anneeParcelle, "Année d'installation") ??
+      verifieBorne(superficie, LIMITES.superficieHa, 'Superficie') ??
+      verifieBorne(productionEstimee, LIMITES.productionKgAn, 'Production estimée');
+    if (erreur) return erreur;
+
+    for (const volet of voletsCoches) {
+      const err = verifieBorne(
+        voletsDetail[volet].nombreFoisParAn,
+        LIMITES.frequenceAn,
+        `${PRATIQUE_RETENUE_LABELS[volet]} — nombre de fois par an`,
+      );
+      if (err) {
+        setVoletActif(volet);
+        return err;
       }
     }
-    if (currentStep === 2) {
-      // Bornes de plausibilité : mêmes valeurs que celles appliquées par le
-      // backend, signalées ici pendant que l'agent est encore devant le champ.
-      const erreur =
-        verifieBorne(anneeParcelle, LIMITES.anneeParcelle, "Année d'installation") ??
-        verifieBorne(superficie, LIMITES.superficieHa, 'Superficie') ??
-        verifieBorne(productionEstimee, LIMITES.productionKgAn, 'Production estimée');
-      if (erreur) {
-        showError(erreur);
-        return;
-      }
 
-      // B4.1 / B4.2 : le questionnaire exige la précision quand la case est cochée.
-      if (pratiquesRetenues.includes(PratiqueRetenue.AUCUNE) && !aucunePrecision.trim()) {
-        showError('B4.1 — précisez les pratiques non listées (« Aucune pratique » est cochée).');
-        return;
-      }
-      if (pratiquesRetenues.includes(PratiqueRetenue.AUTRES) && !autresPrecision.trim()) {
-        showError('B4.2 — précisez les pratiques non listées (« Autres » est cochée).');
-        return;
-      }
-
-      // Nombre de fois par an, volet par volet : on nomme le volet fautif pour
-      // que l'agent sache quel onglet corriger.
-      for (const volet of voletsCoches) {
-        const err = verifieBorne(
-          voletsDetail[volet].nombreFoisParAn,
-          LIMITES.frequenceAn,
-          `${PRATIQUE_RETENUE_LABELS[volet]} — nombre de fois par an`,
-        );
+    for (const [libelle, table] of [
+      ['Nombre de cacaoyers', nombrePlantsBySP],
+      ["Nombre d'arbres", nombreArbresBySP],
+    ] as const) {
+      for (const [sp, valeur] of Object.entries(table)) {
+        const err = verifieBorne(valeur, LIMITES.comptageSP, `${libelle} (SP${sp})`);
         if (err) {
-          setVoletActif(volet);
-          showError(err);
-          return;
+          setSelectedSP(Number(sp));
+          return err;
         }
       }
     }
-    if (currentStep === 3) {
-      if (!delegationId) {
-        showError('Sélectionnez la délégation.');
-        return;
-      }
-      if (!villeId) {
-        showError('Sélectionnez la ville.');
-        return;
-      }
-    }
-    if (currentStep === 4) {
-      const ordres = new Set(sommetsOnly.map((s) => s.ordreSommet));
-      if (sommetsOnly.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
-        showError('Capturez les 4 sommets (S1–S4) de la placette avant de continuer.');
-        return;
-      }
-    }
+    return null;
+  };
+
+  const manquants = champsManquants();
+
+  // Navigation libre : aucune vérification ne retient l'agent. Les contrôles
+  // vivent au moment d'enregistrer, pas au moment de changer d'écran.
+  const handleNextStep = () => {
+    setErrorMsg(null);
     if (currentStep < 5) setCurrentStep((prev) => (prev + 1) as never);
   };
 
@@ -664,30 +671,29 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     }));
   };
 
-  const handleFinishSurvey = async () => {
-    // Validation des sommets de la placette (exactement 4 pour délimiter la parcelle).
-    const ordres = new Set(sommetsOnly.map((s) => s.ordreSommet));
-    if (sommetsOnly.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
-      toast.error('Capturez les 4 sommets de la placette (étape C. GPS) avant de valider.');
-      setCurrentStep(4);
+  /**
+   * Enregistre la collecte.
+   * - BROUILLON : accepté même incomplet, l'agent reviendra le compléter.
+   * - SOUMISE : exige toutes les informations requises ; la fiche devient alors
+   *   non modifiable depuis le mobile (correction réservée à l'administration).
+   * Dans les deux cas les erreurs de saisie bloquent : un enregistrement que le
+   * backend refuserait à la synchro serait un piège silencieux.
+   */
+  const handleSave = async (statut: StatutCollecte) => {
+    setErrorMsg(null);
+
+    const erreur = erreursDeSaisie();
+    if (erreur) {
+      showError(erreur);
       return;
     }
 
-    // Comptages par sous-placette : un chiffre aberrant est bloqué ici plutôt
-    // que rejeté à la synchronisation, quand l'agent a quitté la parcelle.
-    for (const [libelle, table] of [
-      ['Nombre de cacaoyers', nombrePlantsBySP],
-      ["Nombre d'arbres", nombreArbresBySP],
-    ] as const) {
-      for (const [sp, valeur] of Object.entries(table)) {
-        const erreur = verifieBorne(valeur, LIMITES.comptageSP, `${libelle} (SP${sp})`);
-        if (erreur) {
-          toast.error(erreur);
-          setSelectedSP(Number(sp));
-          setCurrentStep(5);
-          return;
-        }
-      }
+    if (statut === StatutCollecte.SOUMISE && manquants.length > 0) {
+      showError(
+        `Soumission impossible : ${manquants.length} information(s) requise(s) manquante(s). ` +
+          'Complétez-les, ou enregistrez en brouillon pour y revenir plus tard.',
+      );
+      return;
     }
 
     setSaving(true);
@@ -703,6 +709,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           consentementDate: new Date().toISOString(),
         },
         parcelle: {
+          statutCollecte: statut,
           anneeParcelle: parseNum(anneeParcelle),
           superficie: parseNum(superficie),
           // Bloc B4 : cases de tête + détail des volets cochés.
@@ -736,7 +743,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
       await notificationService.notifyCollecteEnregistree(`${producteur.prenoms} ${producteur.nom}`);
 
-      toast.success('Collecte enregistrée. Données mises en file de synchronisation.');
+      toast.success(
+        statut === StatutCollecte.BROUILLON
+          ? 'Brouillon enregistré. Vous pourrez le compléter depuis « Enquêtes ».'
+          : 'Collecte soumise. Données mises en file de synchronisation.',
+      );
       onNavigate('enquetes');
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Erreur inconnue.';
@@ -1703,6 +1714,29 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           </View>
         )}
 
+        {/* Récapitulatif de ce qui manque, à la dernière étape. Informe sans
+            interdire : la navigation reste libre, seule la soumission attend
+            que la liste soit vide. */}
+        {currentStep === 5 && manquants.length > 0 && (
+          <View style={styles.manquantsBox}>
+            <View style={styles.manquantsHead}>
+              <Feather name="alert-triangle" size={15} color={colors.warning} />
+              <Text style={styles.manquantsTitre}>
+                {manquants.length} information{manquants.length > 1 ? 's' : ''} requise
+                {manquants.length > 1 ? 's' : ''} manquante{manquants.length > 1 ? 's' : ''}
+              </Text>
+            </View>
+            {manquants.map((m) => (
+              <Text key={m} style={styles.manquantsLigne}>
+                • {m}
+              </Text>
+            ))}
+            <Text style={styles.manquantsAide}>
+              Vous pouvez enregistrer en brouillon et compléter plus tard.
+            </Text>
+          </View>
+        )}
+
         {/* Navigation */}
         <View style={styles.bottomBarNav}>
           {currentStep > 1 && (
@@ -1715,24 +1749,47 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             </TouchableOpacity>
           )}
 
-          {currentStep < 5 ? (
+          {currentStep < 5 && (
             <TouchableOpacity style={styles.nextBtn} onPress={handleNextStep}>
               <Text style={styles.nextBtnText}>Étape Suivante</Text>
               <Feather name="arrow-right" size={18} color={colors.textLight} />
             </TouchableOpacity>
-          ) : (
+          )}
+        </View>
+
+        {/* Deux actions explicites à la fin de la saisie : l'agent décide, rien
+            n'est choisi à sa place. */}
+        {currentStep === 5 && (
+          <View style={styles.actionsFin}>
             <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-              onPress={handleFinishSurvey}
+              style={[styles.draftBtn, saving && styles.saveBtnDisabled]}
+              onPress={() => handleSave(StatutCollecte.BROUILLON)}
+              disabled={saving}
+            >
+              <Feather name="save" size={17} color={colors.textPrimary} />
+              <Text style={styles.draftBtnText}>
+                {saving ? 'Enregistrement…' : 'Enregistrer en brouillon'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.saveBtn,
+                (saving || manquants.length > 0) && styles.saveBtnDisabled,
+              ]}
+              onPress={() => handleSave(StatutCollecte.SOUMISE)}
               disabled={saving}
             >
               <Feather name="check" size={18} color={colors.textLight} />
               <Text style={styles.saveBtnText}>
-                {saving ? 'Enregistrement…' : 'Valider & Enregistrer'}
+                {saving ? 'Enregistrement…' : 'Soumettre la collecte'}
               </Text>
             </TouchableOpacity>
-          )}
-        </View>
+            <Text style={styles.actionsFinAide}>
+              Une collecte soumise n'est plus modifiable depuis le mobile.
+            </Text>
+          </View>
+        )}
 
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -2433,6 +2490,68 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     fontWeight: '800',
     color: colors.textLight,
     fontSize: scale(14),
+    flexShrink: 1,
+  },
+
+  // --- Fin de saisie : ce qui manque, puis les deux actions ---
+  // Encadré d'avertissement et non d'erreur : il informe, il n'interdit pas.
+  manquantsBox: {
+    backgroundColor: colors.warningBg,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: 12,
+    padding: scale(13),
+    marginBottom: scale(12),
+    gap: 3,
+  },
+  manquantsHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 4,
+  },
+  manquantsTitre: {
+    flex: 1,
+    fontSize: scale(12.5),
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  manquantsLigne: {
+    fontSize: scale(12),
+    lineHeight: scale(18),
+    color: colors.textSecondary,
+  },
+  manquantsAide: {
+    marginTop: 6,
+    fontSize: scale(11.5),
+    fontStyle: 'italic',
+    color: colors.textSecondary,
+  },
+  actionsFin: {
+    gap: scale(10),
+    marginTop: scale(4),
+  },
+  draftBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: scale(14),
+    borderRadius: 14,
+    backgroundColor: colors.backgroundCard,
+    borderWidth: 1.5,
+    borderColor: colors.borderLight,
+  },
+  draftBtnText: {
+    fontSize: scale(13.5),
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  actionsFinAide: {
+    fontSize: scale(11),
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   });
 };

@@ -14,9 +14,10 @@ import { Header } from '../components/common/Header';
 import { SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
 import { offlineStorage } from '../services/storage';
+import { toast } from '../components/common/Toast';
 import type { UserProfile } from '../services/auth';
 import type { ParcelleLocal, ProducteurLocal, PlacetteLocal, TabType } from '../types';
-import { formatRole } from '../types';
+import { formatRole, StatutCollecte, STATUT_COLLECTE_LABELS } from '../types';
 
 interface EnquetesScreenProps {
   onNavigate?: (tab: TabType) => void;
@@ -99,8 +100,22 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
     setEditProduction(parcelle.productionEstimee != null ? String(parcelle.productionEstimee) : '');
   };
 
+  /**
+   * Une collecte soumise est verrouillée pour le terrain : l'agent l'a déclarée
+   * terminée. Seule l'administration peut la corriger ensuite (dashboard).
+   * Les collectes antérieures au statut (statutCollecte absent) sont traitées
+   * comme soumises — elles l'ont été sous un flux qui exigeait une fiche complète.
+   */
+  const estModifiable = (p: ParcelleLocal) => p.statutCollecte === StatutCollecte.BROUILLON;
+
   const handleSaveEdit = async () => {
     if (!selectedParcelle) return;
+    if (!estModifiable(selectedParcelle)) {
+      toast.error(
+        'Cette collecte a été soumise : la correction passe par l\'administration.',
+      );
+      return;
+    }
     setSavingEdit(true);
     const parseNum = (v: string): number | undefined => {
       const n = parseFloat(v.replace(',', '.'));
@@ -224,6 +239,17 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                     </Text>
                   </View>
 
+                  {/* Un brouillon se repère avant tout le reste : c'est une
+                      fiche à revenir compléter. */}
+                  {!estModifiable(parcelle) ? null : (
+                    <View style={[styles.badgeConforme, styles.badgeConformePending]}>
+                      <Feather name="edit-3" size={10} color={colors.warning} />
+                      <Text style={[styles.badgeConformeText, { color: colors.warning }]}>
+                        {STATUT_COLLECTE_LABELS[StatutCollecte.BROUILLON]}
+                      </Text>
+                    </View>
+                  )}
+
                   {isGeolocalisee(parcelle.id) ? (
                     <View style={styles.badgeConforme}>
                       <Feather name="shield" size={10} color={colors.emeraldPrimary} />
@@ -331,6 +357,15 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                   })()}
                 </Text>
 
+                {/* Deux axes distincts, volontairement séparés : le statut
+                    métier (brouillon / soumise) et l'état technique d'envoi. */}
+                <Text style={styles.detailLabel}>Statut de la collecte</Text>
+                <Text style={styles.detailValue}>
+                  {estModifiable(selectedParcelle)
+                    ? 'Brouillon — à compléter puis soumettre'
+                    : 'Soumise — non modifiable depuis le mobile'}
+                </Text>
+
                 <Text style={styles.detailLabel}>Statut de synchronisation</Text>
                 <Text style={styles.detailValue}>
                   {selectedParcelle.synced ? 'Synchronisé ✓' : 'En attente de synchronisation'}
@@ -398,13 +433,25 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                 >
                   <Text style={styles.cancelBtnText}>Fermer</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.closeBtn, { flex: 1 }]}
-                  onPress={() => setEditMode(true)}
-                >
-                  <Feather name="edit-2" size={15} color={colors.textLight} />
-                  <Text style={styles.closeBtnText}>  Modifier</Text>
-                </TouchableOpacity>
+                {/* Le bouton « Modifier » n'apparaît que sur un brouillon : une
+                    fiche soumise est verrouillée pour le terrain. Le message
+                    explique où aller plutôt que de laisser l'agent buter. */}
+                {selectedParcelle && estModifiable(selectedParcelle) ? (
+                  <TouchableOpacity
+                    style={[styles.closeBtn, { flex: 1 }]}
+                    onPress={() => setEditMode(true)}
+                  >
+                    <Feather name="edit-2" size={15} color={colors.textLight} />
+                    <Text style={styles.closeBtnText}>  Modifier</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.verrouBox, { flex: 1 }]}>
+                    <Feather name="lock" size={13} color={colors.textSecondary} />
+                    <Text style={styles.verrouTexte}>
+                      Collecte soumise — correction via l'administration
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -415,6 +462,26 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
+  // Remplace le bouton « Modifier » sur une collecte soumise : même emprise,
+  // pour que la disposition du pied de modale ne bouge pas.
+  verrouBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  verrouTexte: {
+    flex: 1,
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,

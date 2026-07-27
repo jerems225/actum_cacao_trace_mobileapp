@@ -19,7 +19,50 @@ L'application mobile a été conçue en s'inspirant directement de la maquette d
 - **Bloc C (Géoréférencement Placette)** : Numéro de placette, délégation régionale, village et capture GPS haute précision des 4 sommets avec validation des bornes géographiques de Côte d'Ivoire (`lat [4.0, 10.8]`, `lon [-8.6, -2.5]`).
 - **Bloc D (Dendrométrie SP1 à SP6)** : voir la section dédiée ci-dessous.
 
-### 1 bis. Bloc B4 — Pratiques culturales, disposition retenue
+### 1 bis. Navigation libre et cycle de vie de la collecte
+
+Sur le terrain, l'ordre de saisie n'est pas celui du formulaire : un producteur
+s'absente, un relevé GPS attend une éclaircie. **La navigation entre blocs n'est
+donc jamais bloquée** — les contrôles vivent au moment d'enregistrer, pas au
+moment de changer d'écran.
+
+Deux niveaux de contrôle, à ne pas confondre :
+
+| Niveau | Quand | Effet |
+|---|---|---|
+| **Erreurs de saisie** (`erreursDeSaisie`) | valeur hors bornes de plausibilité | Bloque **tout** enregistrement, brouillon compris — le backend la refuserait à la synchro, et un brouillon impossible à synchroniser serait un piège silencieux |
+| **Informations manquantes** (`champsManquants`) | champ requis vide | Bloque **seulement la soumission**. La liste s'affiche en clair à la dernière étape |
+
+À la fin du Bloc D, deux actions explicites — l'agent décide, rien n'est choisi à
+sa place :
+
+```
+┌─────────────────────────────────┐
+│ ⚠ 3 informations requises      │
+│   manquantes                    │
+│   • Prénoms du producteur (A)   │
+│   • Ville (Bloc C)              │
+│   • Sommets GPS (2/4) — Bloc C  │
+│   Vous pouvez enregistrer en    │
+│   brouillon et compléter plus   │
+│   tard.                         │
+└─────────────────────────────────┘
+[ 💾 Enregistrer en brouillon ]
+[ ✓  Soumettre la collecte     ]
+  Une collecte soumise n'est plus
+  modifiable depuis le mobile.
+```
+
+| Statut | Comportement mobile |
+|---|---|
+| **Brouillon** | Badge orange dans « Enquêtes ». Synchronisé quand même (rien n'est perdu si l'appareil casse) mais exclu des statistiques et des exports côté serveur. |
+| **Soumise** | Le bouton « Modifier » disparaît de la fiche, remplacé par un encart verrouillé qui indique où adresser la correction. Le backend refuse aussi la modification arrivée par la synchro. |
+
+Statut métier et état de synchronisation sont **deux axes distincts**, affichés
+séparément dans la fiche : une collecte peut être « soumise mais pas encore
+synchronisée », ou « brouillon déjà synchronisé ».
+
+### 1 ter. Bloc B4 — Pratiques culturales, disposition retenue
 
 Le questionnaire papier présente le B4 en tableau : 3 colonnes (Entretien /
 Tailles / Engrais) × 4 rubriques (Types de pratiques, Agent(s) pratiquant(s),
@@ -65,7 +108,7 @@ Aucune pratique et Autres demandent une précision écrite.
 | **B4.1 / B4.2** | Cocher « Aucune pratique » ou « Autres » ouvre le champ de précision, obligatoire pour passer à l'étape suivante. |
 | **Libellé « Agent ANADER »** | Choix assumé de fidélité au formulaire papier ; le code technique reste `AGENT_TERRAIN`. |
 
-### 1 ter. Bloc D — Mesures dendrométriques, règles de saisie
+### 1 quater. Bloc D — Mesures dendrométriques, règles de saisie
 
 | Règle | Comportement |
 |---|---|

@@ -357,6 +357,9 @@ class OfflineStorageService {
   private parcellePayload(p: ParcelleLocal): Record<string, unknown> {
     return {
       producteurId: p.producteurId,
+      // Cycle de vie : BROUILLON exclut la collecte des stats et des exports,
+      // SOUMISE la verrouille pour le terrain.
+      statutCollecte: p.statutCollecte,
       anneeParcelle: p.anneeParcelle,
       superficie: p.superficie,
       // Bloc B4 — pratiques culturales

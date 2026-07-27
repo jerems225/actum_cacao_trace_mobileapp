@@ -243,6 +243,24 @@ export interface PratiqueCulturaleLocal {
   nombreFoisParAn?: number;
 }
 
+/**
+ * Cycle de vie d'une collecte, porté par la parcelle.
+ * BROUILLON : fiche incomplète, l'agent la complétera plus tard. Elle est bien
+ *   synchronisée (rien n'est perdu si l'appareil casse) mais reste exclue des
+ *   statistiques et des exports.
+ * SOUMISE : fiche déclarée terminée. Plus modifiable depuis le mobile ; seule
+ *   l'administration peut la corriger.
+ */
+export enum StatutCollecte {
+  BROUILLON = 'BROUILLON',
+  SOUMISE = 'SOUMISE',
+}
+
+export const STATUT_COLLECTE_LABELS: Record<StatutCollecte, string> = {
+  [StatutCollecte.BROUILLON]: 'Brouillon',
+  [StatutCollecte.SOUMISE]: 'Soumise',
+};
+
 /** Unité de l'estimation de production — valeurs fermées (colonne texte). */
 export enum UniteProduction {
   KG_PAR_TRAITE = 'KG_PAR_TRAITE',
@@ -297,6 +315,8 @@ export interface ParcelleLocal {
   serverId?: string;
   producteurId: string;
   producteurNom?: string;
+  /** Cycle de vie de la collecte. Absent = collecte antérieure, donc soumise. */
+  statutCollecte?: StatutCollecte;
   anneeParcelle?: number;
   superficie?: number;
   // --- Bloc B4 : pratiques culturales ---
