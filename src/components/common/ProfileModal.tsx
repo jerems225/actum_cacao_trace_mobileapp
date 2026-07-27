@@ -149,7 +149,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <Image source={{ uri: avatarAffiche }} style={styles.avatarImg} />
                 ) : (
                   <Image
-                    source={require('../../../assets/images/agent_avatar.png')}
+                    source={require('../../../assets/images/agent_avatar.jpg')}
                     style={styles.avatarImg}
                   />
                 )}

@@ -153,7 +153,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     <View style={styles.container}>
       {/* Fond bas : plantation de cacao, fondu vers le fond de page */}
       <Image
-        source={require('../../assets/images/cocoa_farm_hero.png')}
+        source={require('../../assets/images/cocoa_farm_hero.jpg')}
         style={styles.bgImage}
         resizeMode="cover"
       />

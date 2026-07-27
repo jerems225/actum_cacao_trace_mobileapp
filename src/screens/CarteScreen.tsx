@@ -72,7 +72,7 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
       <View style={styles.mapCanvas}>
         {/* Image de Carte Satellite SIG d'arrière-plan */}
         <Image
-          source={require('../../assets/images/map_satellite.png')}
+          source={require('../../assets/images/map_satellite.jpg')}
           style={styles.mapBackgroundImage}
         />
 

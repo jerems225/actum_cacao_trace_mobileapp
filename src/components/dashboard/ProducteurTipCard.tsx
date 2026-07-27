@@ -19,7 +19,7 @@ export const ProducteurTipCard: React.FC<ProducteurTipCardProps> = ({
   return (
     <View style={[styles.card, { borderRadius: cardBorderRadius }]}>
       <Image
-        source={require('../../../assets/images/cacao_pod.png')}
+        source={require('../../../assets/images/cacao_pod.jpg')}
         style={styles.illustrationImage}
       />
       <View style={styles.contentSection}>

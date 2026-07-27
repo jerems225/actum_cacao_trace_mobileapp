@@ -401,7 +401,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
                   source={
                     avatarAffiche
                       ? { uri: avatarAffiche }
-                      : require('../../assets/images/agent_avatar.png')
+                      : require('../../assets/images/agent_avatar.jpg')
                   }
                   style={styles.avatar}
                 />

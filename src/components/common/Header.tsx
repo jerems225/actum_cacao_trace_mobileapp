@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
               <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
             ) : (
               <Image
-                source={require('../../../assets/images/agent_avatar.png')}
+                source={require('../../../assets/images/agent_avatar.jpg')}
                 style={styles.avatarImage}
               />
             )}
