@@ -192,8 +192,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <View style={styles.targetWidget}>
               <View style={styles.targetTopRow}>
                 <Text style={styles.targetTitle}>État sanitaire des plants de cacao</Text>
-                <TouchableOpacity onPress={() => onNavigate('carte')}>
-                  <Text style={styles.seeAllText}>Voir carte</Text>
+                {/* Renvoyait vers l'onglet carte, retiré du menu : on pointe
+                    désormais vers la liste des collectes, seule vue accessible. */}
+                <TouchableOpacity onPress={() => onNavigate('enquetes')}>
+                  <Text style={styles.seeAllText}>Voir les collectes</Text>
                 </TouchableOpacity>
               </View>
 

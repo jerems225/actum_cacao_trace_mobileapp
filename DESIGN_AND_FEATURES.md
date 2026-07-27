@@ -55,7 +55,7 @@ sa place :
 
 | Statut | Comportement mobile |
 |---|---|
-| **Brouillon** | Badge orange dans « Enquêtes », et bouton **« Compléter la fiche »**. Synchronisé quand même (rien n'est perdu si l'appareil casse) mais exclu des statistiques et des exports côté serveur. |
+| **Brouillon** | Badge gris dans la liste, et bouton **« Compléter la fiche »**. **Reste sur l'appareil** : rien n'entre dans la file d'envoi. |
 | **Soumise** | Le bouton disparaît de la fiche, remplacé par un encart verrouillé qui indique où adresser la correction. Le backend refuse aussi la modification arrivée par la synchro. |
 
 **Reprise d'un brouillon** — « Compléter la fiche » réouvre **le parcours de
@@ -195,6 +195,13 @@ guide l'agent, le backend refuse pour de bon.
 
 - **Moteur de Stockage Local** (`offlineStorage.ts`) : Sauvegarde locale instantanée sans connexion Internet.
 - **File d'attente** : une ligne par entité (`CREATE`, `UPDATE`, `DELETE`), envoyée par vagues avec remappage des clés étrangères.
+
+**Règle centrale : seule une collecte SOUMISE entre dans la file d'envoi.** Un
+brouillon est un travail en cours qui vit sur l'appareil ; l'envoyer n'aurait pas
+de sens et polluerait les données de production. La file ne sert qu'à une chose :
+retenir ce qui a été **soumis mais n'a pas pu partir**, faute de réseau — et
+réessayer. Conséquence : un brouillon n'ayant jamais été transmis, sa soumission
+part intégralement en **création**.
 
 **L'écran « Envoi des collectes » ne montre pas cette mécanique.** Il raisonne en
 **collectes**, pas en enregistrements : une seule fiche produit une dizaine de

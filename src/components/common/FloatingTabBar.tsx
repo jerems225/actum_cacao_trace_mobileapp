@@ -17,12 +17,14 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({
 }) => {
   const { isTablet, tabBarBottomInset } = useResponsive();
 
+  // L'onglet carte a été retiré du menu. L'écran existe toujours
+  // (`CarteScreen`) mais n'est plus atteignable depuis la barre : la cartographie
+  // relève de la restitution, côté administration, pas de la saisie terrain.
   const tabs: Array<{ id: TabType; label: string; icon: keyof typeof Feather.glyphMap }> = [
     { id: 'home', label: 'Accueil', icon: 'grid' },
-    { id: 'enquetes', label: 'Parcelles', icon: 'layers' },
-    { id: 'collecte', label: 'Collecte', icon: 'plus-circle' },
-    { id: 'carte', label: 'Carte SIG', icon: 'map-pin' },
-    { id: 'sync', label: 'Sync', icon: 'refresh-cw' },
+    { id: 'enquetes', label: 'Collectes', icon: 'layers' },
+    { id: 'collecte', label: 'Saisir', icon: 'plus-circle' },
+    { id: 'sync', label: 'Envoi', icon: 'upload-cloud' },
   ];
 
   return (
@@ -117,7 +119,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -6,
     right: -8,
-    backgroundColor: colors.warning,
+    // Compteur de collectes à envoyer : rouge sobre, comme les autres compteurs.
+    backgroundColor: colors.error,
     width: 16,
     height: 16,
     borderRadius: 8,

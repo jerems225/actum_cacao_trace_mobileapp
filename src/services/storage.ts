@@ -16,7 +16,7 @@ import { placetteRepository } from './repositories/placette.repository';
 import { syncQueueRepository } from './repositories/syncQueue.repository';
 import { syncHistoryRepository } from './repositories/syncHistory.repository';
 import { generateId, nowIso } from './repositories/ids';
-import { EtatSanitaire } from '../types';
+import { EtatSanitaire, StatutCollecte } from '../types';
 import type {
   ProducteurLocal,
   ParcelleLocal,
@@ -70,7 +70,7 @@ class OfflineStorageService {
   // Créations (persistance locale + mise en file de synchronisation)
   // ==========================================================================
 
-  async saveProducteur(data: NewProducteur): Promise<ProducteurLocal> {
+  async saveProducteur(data: NewProducteur, enfiler = true): Promise<ProducteurLocal> {
     const producteur: ProducteurLocal = {
       ...data,
       id: generateId('prod'),
@@ -79,11 +79,13 @@ class OfflineStorageService {
       updatedAt: nowIso(),
     };
     await producteurRepository.save(producteur);
-    await this.enqueue('Producteur', 'CREATE', producteur.id, this.producteurPayload(producteur));
+    if (enfiler) {
+      await this.enqueue('Producteur', 'CREATE', producteur.id, this.producteurPayload(producteur));
+    }
     return producteur;
   }
 
-  async saveParcelle(data: NewParcelle): Promise<ParcelleLocal> {
+  async saveParcelle(data: NewParcelle, enfiler = true): Promise<ParcelleLocal> {
     const parcelle: ParcelleLocal = {
       ...data,
       id: generateId('parc'),
@@ -92,11 +94,13 @@ class OfflineStorageService {
       updatedAt: nowIso(),
     };
     await parcelleRepository.save(parcelle);
-    await this.enqueue('Parcelle', 'CREATE', parcelle.id, this.parcellePayload(parcelle));
+    if (enfiler) {
+      await this.enqueue('Parcelle', 'CREATE', parcelle.id, this.parcellePayload(parcelle));
+    }
     return parcelle;
   }
 
-  async savePlacette(data: NewPlacette): Promise<PlacetteLocal> {
+  async savePlacette(data: NewPlacette, enfiler = true): Promise<PlacetteLocal> {
     const placetteId = generateId('plc');
 
     // Réattribution cohérente des identifiants imbriqués : chaque sous-placette
@@ -122,7 +126,7 @@ class OfflineStorageService {
       updatedAt: nowIso(),
     };
     await placetteRepository.save(placette);
-    await this.enqueuePlacetteTree(placette);
+    if (enfiler) await this.enqueuePlacetteTree(placette);
     return placette;
   }
 
@@ -135,33 +139,61 @@ class OfflineStorageService {
 
   /**
    * Enregistre une collecte complète (Blocs A→D) en une opération cohérente :
-   * producteur, parcelle, placette + sous-placettes + mesures. Chaque entité
-   * est persistée localement puis mise en file de synchronisation dans l'ordre
-   * de dépendance (le SyncManager remappera les clés étrangères).
+   * producteur, parcelle, placette + sous-placettes + mesures.
+   *
+   * ⚠️ RÈGLE CENTRALE : **seule une collecte SOUMISE entre dans la file d'envoi.**
+   * Un brouillon est un travail en cours qui vit sur l'appareil ; l'envoyer au
+   * serveur n'aurait pas de sens et polluerait les données de production. La file
+   * de synchronisation ne sert qu'à une chose : retenir ce qui a été soumis mais
+   * n'a pas encore pu partir, faute de réseau. Elle réessaiera d'elle-même.
    */
   async saveCompleteCollecte(input: {
     producteur: NewProducteur;
     parcelle: Omit<NewParcelle, 'producteurId'>;
     placette: Omit<NewPlacette, 'parcelleId'>;
   }): Promise<{ producteur: ProducteurLocal; parcelle: ParcelleLocal; placette: PlacetteLocal }> {
-    const producteur = await this.saveProducteur(input.producteur);
-    const parcelle = await this.saveParcelle({
-      ...input.parcelle,
-      producteurId: producteur.id,
-      producteurNom: `${producteur.prenoms} ${producteur.nom}`,
-    });
-    const placette = await this.savePlacette({
-      ...input.placette,
-      parcelleId: parcelle.id,
-    });
+    const aEnvoyer = input.parcelle.statutCollecte === StatutCollecte.SOUMISE;
+
+    const producteur = await this.saveProducteur(input.producteur, aEnvoyer);
+    const parcelle = await this.saveParcelle(
+      {
+        ...input.parcelle,
+        producteurId: producteur.id,
+        producteurNom: `${producteur.prenoms} ${producteur.nom}`,
+      },
+      aEnvoyer,
+    );
+    const placette = await this.savePlacette(
+      { ...input.placette, parcelleId: parcelle.id },
+      aEnvoyer,
+    );
     return { producteur, parcelle, placette };
+  }
+
+  /**
+   * Met en file toute une collecte déjà persistée localement.
+   * Utilisé quand un brouillon — jamais envoyé, donc sans identifiant serveur —
+   * est soumis : chaque entité part en CRÉATION.
+   */
+  private async enqueueCollecteComplete(
+    producteur: ProducteurLocal,
+    parcelle: ParcelleLocal,
+    placette: PlacetteLocal | null,
+  ): Promise<void> {
+    await this.enqueue('Producteur', 'CREATE', producteur.id, this.producteurPayload(producteur));
+    await this.enqueue('Parcelle', 'CREATE', parcelle.id, this.parcellePayload(parcelle));
+    if (placette) await this.enqueuePlacetteTree(placette);
   }
 
   // ==========================================================================
   // Modifications (persistance locale + file de synchronisation UPDATE)
   // ==========================================================================
 
-  async updateProducteur(id: string, patch: Partial<NewProducteur>): Promise<ProducteurLocal | null> {
+  async updateProducteur(
+    id: string,
+    patch: Partial<NewProducteur>,
+    enfiler = true,
+  ): Promise<ProducteurLocal | null> {
     const existing = await producteurRepository.findById(id);
     if (!existing) return null;
     const updated: ProducteurLocal = {
@@ -171,14 +203,20 @@ class OfflineStorageService {
       updatedAt: nowIso(),
     };
     await producteurRepository.save(updated);
-    await this.enqueue('Producteur', 'UPDATE', updated.id, {
-      ...this.producteurPayload(updated),
-      serverId: updated.serverId,
-    });
+    if (enfiler) {
+      await this.enqueue('Producteur', 'UPDATE', updated.id, {
+        ...this.producteurPayload(updated),
+        serverId: updated.serverId,
+      });
+    }
     return updated;
   }
 
-  async updateParcelle(id: string, patch: Partial<NewParcelle>): Promise<ParcelleLocal | null> {
+  async updateParcelle(
+    id: string,
+    patch: Partial<NewParcelle>,
+    enfiler = true,
+  ): Promise<ParcelleLocal | null> {
     const existing = await parcelleRepository.findById(id);
     if (!existing) return null;
     const updated: ParcelleLocal = {
@@ -188,10 +226,12 @@ class OfflineStorageService {
       updatedAt: nowIso(),
     };
     await parcelleRepository.save(updated);
-    await this.enqueue('Parcelle', 'UPDATE', updated.id, {
-      ...this.parcellePayload(updated),
-      serverId: updated.serverId,
-    });
+    if (enfiler) {
+      await this.enqueue('Parcelle', 'UPDATE', updated.id, {
+        ...this.parcellePayload(updated),
+        serverId: updated.serverId,
+      });
+    }
     return updated;
   }
 
@@ -216,12 +256,15 @@ class OfflineStorageService {
   /**
    * Met à jour une collecte existante (reprise d'un brouillon).
    *
-   * Modification ENTITÉ PAR ENTITÉ, et non remplacement en bloc : chaque
-   * sous-placette et chaque mesure conserve son identifiant serveur d'un
-   * passage à l'autre. L'appariement se fait sur des clés stables — le `numero`
-   * pour les sous-placettes, l'identifiant local pour les mesures — ce qui
-   * permet de distinguer trois cas : présent des deux côtés → UPDATE, nouveau
-   * → CREATE, disparu → DELETE.
+   * Deux issues, selon le statut enregistré :
+   *
+   * 1. **Encore brouillon** → tout reste local, RIEN n'entre dans la file. L'agent
+   *    peut reprendre sa fiche autant de fois qu'il veut sans rien envoyer.
+   * 2. **Soumise** → la collecte part enfin. Comme un brouillon n'a jamais été
+   *    transmis, aucune entité ne possède d'identifiant serveur : tout part en
+   *    CRÉATION. Le cas UPDATE ne concerne qu'une collecte déjà présente sur le
+   *    serveur, ce qui, côté terrain, n'arrive plus (une fiche soumise est
+   *    verrouillée) — il reste couvert pour la correction par l'administration.
    */
   async updateCompleteCollecte(input: {
     parcelleId: string;
@@ -232,32 +275,53 @@ class OfflineStorageService {
     const courant = await this.getCollecte(input.parcelleId);
     if (!courant) return null;
 
-    await this.updateProducteur(courant.producteur.id, {
-      ...input.producteur,
-      // Le nom dénormalisé sur la parcelle doit suivre une correction d'identité.
-    });
-    const parcelle = await this.updateParcelle(courant.parcelle.id, {
-      ...input.parcelle,
-      producteurNom: `${input.producteur.prenoms ?? courant.producteur.prenoms} ${
-        input.producteur.nom ?? courant.producteur.nom
-      }`,
-    });
+    const soumission = input.parcelle.statutCollecte === StatutCollecte.SOUMISE;
+    // Une entité déjà connue du serveur se met à jour ; sinon elle se crée.
+    const dejaEnvoyee = !!courant.parcelle.serverId;
 
-    if (courant.placette) {
-      await this.updatePlacetteTree(courant.placette, input.placette);
-    } else {
-      // Cas limite : brouillon enregistré sans placette (aucun point relevé).
-      await this.savePlacette({ ...input.placette, parcelleId: courant.parcelle.id });
+    const producteur = await this.updateProducteur(
+      courant.producteur.id,
+      input.producteur,
+      soumission && dejaEnvoyee,
+    );
+    const parcelle = await this.updateParcelle(
+      courant.parcelle.id,
+      {
+        ...input.parcelle,
+        // Le nom dénormalisé sur la parcelle suit une correction d'identité.
+        producteurNom: `${input.producteur.prenoms ?? courant.producteur.prenoms} ${
+          input.producteur.nom ?? courant.producteur.nom
+        }`,
+      },
+      soumission && dejaEnvoyee,
+    );
+
+    const placette = courant.placette
+      ? await this.updatePlacetteTree(courant.placette, input.placette, soumission && dejaEnvoyee)
+      : // Cas limite : brouillon enregistré sans placette (aucun point relevé).
+        await this.savePlacette(
+          { ...input.placette, parcelleId: courant.parcelle.id },
+          soumission && dejaEnvoyee,
+        );
+
+    // Soumission d'un brouillon jamais transmis : toute la collecte part en une
+    // fois, dans l'ordre de dépendance.
+    if (soumission && !dejaEnvoyee && producteur && parcelle) {
+      await this.enqueueCollecteComplete(producteur, parcelle, placette);
     }
 
     return parcelle ? { parcelle } : null;
   }
 
-  /** Applique le diff sous-placettes / mesures d'une placette existante. */
+  /**
+   * Applique le diff sous-placettes / mesures d'une placette existante.
+   * `enfiler` à false = correction d'un brouillon : on écrit seulement en local.
+   */
   private async updatePlacetteTree(
     existante: PlacetteLocal,
     entrant: Omit<NewPlacette, 'parcelleId'>,
-  ): Promise<void> {
+    enfiler = true,
+  ): Promise<PlacetteLocal> {
     const ancienesParNumero = new Map(existante.sousPlacettes.map((sp) => [sp.numero, sp]));
     const numerosEntrants = new Set((entrant.sousPlacettes ?? []).map((sp) => sp.numero));
 
@@ -282,15 +346,17 @@ class OfflineStorageService {
           mesures,
         };
         sousPlacettes.push(creee);
-        await this.enqueue('SousPlacette', 'CREATE', creee.id, this.sousPlacettePayload(creee));
-        for (const m of mesures) {
-          await this.enqueue('MesureArbre', 'CREATE', m.id, this.mesurePayload(m));
+        if (enfiler) {
+          await this.enqueue('SousPlacette', 'CREATE', creee.id, this.sousPlacettePayload(creee));
+          for (const m of mesures) {
+            await this.enqueue('MesureArbre', 'CREATE', m.id, this.mesurePayload(m));
+          }
         }
         continue;
       }
 
       // Sous-placette conservée → mise à jour, puis diff de ses mesures.
-      const mesures = await this.diffMesures(ancienne, entrante.mesures ?? []);
+      const mesures = await this.diffMesures(ancienne, entrante.mesures ?? [], enfiler);
       const majSP: SousPlacetteLocal = {
         ...ancienne,
         nombrePlantsCacao: entrante.nombrePlantsCacao,
@@ -299,16 +365,20 @@ class OfflineStorageService {
         mesures,
       };
       sousPlacettes.push(majSP);
-      await this.enqueue('SousPlacette', 'UPDATE', majSP.id, {
-        ...this.sousPlacettePayload(majSP),
-        serverId: majSP.serverId,
-      });
+      if (enfiler) {
+        await this.enqueue('SousPlacette', 'UPDATE', majSP.id, {
+          ...this.sousPlacettePayload(majSP),
+          serverId: majSP.serverId,
+        });
+      }
     }
 
     // Sous-placettes retirées de la fiche → suppression côté serveur aussi.
-    for (const ancienne of existante.sousPlacettes) {
-      if (numerosEntrants.has(ancienne.numero)) continue;
-      await this.enqueue('SousPlacette', 'DELETE', ancienne.id, { serverId: ancienne.serverId });
+    if (enfiler) {
+      for (const ancienne of existante.sousPlacettes) {
+        if (numerosEntrants.has(ancienne.numero)) continue;
+        await this.enqueue('SousPlacette', 'DELETE', ancienne.id, { serverId: ancienne.serverId });
+      }
     }
 
     const placette: PlacetteLocal = {
@@ -324,10 +394,13 @@ class OfflineStorageService {
       updatedAt: nowIso(),
     };
     await placetteRepository.save(placette);
-    await this.enqueue('Placette', 'UPDATE', placette.id, {
-      ...this.placettePayload(placette),
-      serverId: placette.serverId,
-    });
+    if (enfiler) {
+      await this.enqueue('Placette', 'UPDATE', placette.id, {
+        ...this.placettePayload(placette),
+        serverId: placette.serverId,
+      });
+    }
+    return placette;
   }
 
   /**
@@ -338,6 +411,7 @@ class OfflineStorageService {
   private async diffMesures(
     ancienne: SousPlacetteLocal,
     entrantes: MesureArbreLocal[],
+    enfiler = true,
   ): Promise<MesureArbreLocal[]> {
     const anciennesParId = new Map(ancienne.mesures.map((m) => [m.id, m]));
     const idsEntrants = new Set(entrantes.map((m) => m.id).filter(Boolean));
@@ -354,10 +428,12 @@ class OfflineStorageService {
           createdAt: existante.createdAt,
         };
         resultat.push(maj);
-        await this.enqueue('MesureArbre', 'UPDATE', maj.id, {
-          ...this.mesurePayload(maj),
-          serverId: maj.serverId,
-        });
+        if (enfiler) {
+          await this.enqueue('MesureArbre', 'UPDATE', maj.id, {
+            ...this.mesurePayload(maj),
+            serverId: maj.serverId,
+          });
+        }
       } else {
         const creee: MesureArbreLocal = {
           ...entrante,
@@ -367,13 +443,17 @@ class OfflineStorageService {
           createdAt: entrante.createdAt || nowIso(),
         };
         resultat.push(creee);
-        await this.enqueue('MesureArbre', 'CREATE', creee.id, this.mesurePayload(creee));
+        if (enfiler) {
+          await this.enqueue('MesureArbre', 'CREATE', creee.id, this.mesurePayload(creee));
+        }
       }
     }
 
-    for (const m of ancienne.mesures) {
-      if (!idsEntrants.has(m.id)) {
-        await this.enqueue('MesureArbre', 'DELETE', m.id, { serverId: m.serverId });
+    if (enfiler) {
+      for (const m of ancienne.mesures) {
+        if (!idsEntrants.has(m.id)) {
+          await this.enqueue('MesureArbre', 'DELETE', m.id, { serverId: m.serverId });
+        }
       }
     }
 

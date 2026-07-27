@@ -146,11 +146,23 @@ export const apiClient = {
   },
 
   // --- Synchronisation ---
-  pushSync(request: SyncPushRequest): Promise<SyncPushResult[]> {
-    return apiRequest<SyncPushResult[]>('/sync/push', {
-      method: 'POST',
-      body: request,
-    });
+  /**
+   * Pousse un lot vers le serveur et renvoie TOUJOURS un tableau de résultats.
+   *
+   * Le backend répond `data: { results: [...] }` — un objet, pas un tableau nu.
+   * `apiRequest<T>` se contentant de caster, TypeScript ne pouvait pas voir
+   * l'écart : le tableau attendu arrivait sous forme d'objet et `results.map`
+   * échouait à l'exécution. On désencapsule ici, en tolérant les deux formes
+   * pour qu'une application déjà installée continue de fonctionner si la réponse
+   * serveur évolue.
+   */
+  async pushSync(request: SyncPushRequest): Promise<SyncPushResult[]> {
+    const reponse = await apiRequest<SyncPushResult[] | { results?: SyncPushResult[] }>(
+      '/sync/push',
+      { method: 'POST', body: request },
+    );
+    if (Array.isArray(reponse)) return reponse;
+    return Array.isArray(reponse?.results) ? reponse.results : [];
   },
 
   pullSync(since: string, deviceId: string): Promise<SyncPullResponse> {
