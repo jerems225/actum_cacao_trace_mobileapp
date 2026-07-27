@@ -15,7 +15,7 @@ L'application mobile a été conçue en s'inspirant directement de la maquette d
 
 ### 1. Formulaire Multi-Étapes (Wizard Responsive Mobile & Tablette)
 - **Bloc A (Producteur & RGPD)** : Saisie identité, tranche d'âge, situation familiale et switch de consentement obligatoire RGPD du producteur.
-- **Bloc B (Pratiques Culturales)** : Année d'installation, superficie déclarée, **B4 — pratiques culturales** (voir ci-dessous), **maladies observées choisies dans le référentiel** (les mêmes valeurs qu'au Bloc D) + champ « autre constat », et production estimée.
+- **Bloc B (Pratiques Culturales)** : Année d'installation, superficie déclarée, **B4 — pratiques culturales** (voir ci-dessous) et production estimée. *Pas de saisie d'état sanitaire ici* : il est relevé sujet par sujet au Bloc D, avec photo de diagnostic — un doublon déclaratif au niveau parcelle produisait une donnée redondante et deux réponses possiblement contradictoires.
 - **Bloc C (Géoréférencement Placette)** : Numéro de placette, délégation régionale, village et capture GPS haute précision des 4 sommets avec validation des bornes géographiques de Côte d'Ivoire (`lat [4.0, 10.8]`, `lon [-8.6, -2.5]`).
 - **Bloc D (Dendrométrie SP1 à SP6)** : voir la section dédiée ci-dessous.
 
@@ -57,7 +57,8 @@ B4 — Pratiques culturales (plusieurs réponses possibles)
 | **Comptage contextuel** | Onglet *Cacaoyer* → seul « Nombre de cacaoyers » est affiché ; onglet *Arbre d'ombrage* → seul « Nombre d'arbres ». Les deux valeurs restent mémorisées par SP et partent ensemble à l'enregistrement. |
 | **Grosseur du sujet** | Cacaoyer : bascule **cm** ou **DBH (m)**, une seule des deux. Arbre d'ombrage : **DBH (m) uniquement**, pas de bascule. Changer de type vide le champ (unités différentes). |
 | **Quota SP2–SP6** | 3 cacaoyers maximum par sous-placette (bloquant) ; SP1 illimité (recensement). Arbres illimités partout. |
-| **État MALADE** | Maladie obligatoire (liste + « autre ») **et** photo de diagnostic obligatoire. |
+| **État MALADE** | Maladie obligatoire (liste déroulante + « autre ») **et** photo de diagnostic obligatoire. |
+| **Maladie en liste déroulante** | Composant `SelectField` (`components/common/SelectField.tsx`) : champ fermé qui ouvre une feuille modale, avec recherche automatique au-delà de 8 entrées. Le référentiel s'enrichit au fil des validations — des chips finiraient par occuper tout l'écran. Aucune dépendance de picker ajoutée. |
 | **Maladie hors-liste** | Saisie par l'agent → ajoutée au référentiel en `A_VALIDER`, réutilisable par toute l'équipe après validation dans l'administration. |
 | **Liste jamais vide** | Si le référentiel n'est pas encore synchronisé (1re installation, terrain sans réseau), un repli embarqué de 12 maladies courantes est proposé (`MALADIES_PAR_DEFAUT`). |
 

@@ -13,6 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Header } from '../components/common/Header';
+import { SelectField } from '../components/common/SelectField';
 import { PlacettePointsCapture } from '../components/GPS/PlacettePointsCapture';
 import type { ManualPointValues } from '../components/GPS/PlacettePointsCapture';
 import { colors, useResponsive } from '../theme';
@@ -182,11 +183,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     [PratiqueRetenue.ENGRAIS]: { ...VOLET_VIDE },
   });
   const [voletActif, setVoletActif] = useState<VoletPratique | null>(null);
-  // Maladies observées sur la parcelle : sélection multiple dans le référentiel
-  // (les libellés, pas les ids : la parcelle porte un constat, pas une relation).
-  const [maladiesParcelle, setMaladiesParcelle] = useState<string[]>([]);
-  // Maladie constatée absente du référentiel → champ `maladiesNonListees`.
-  const [maladiesAutre, setMaladiesAutre] = useState('');
   const [productionEstimee, setProductionEstimee] = useState('');
 
   // Volets réellement à saisir = intersection des cases cochées et des 3 volets.
@@ -222,11 +218,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
   const toggleDansListe = <T,>(liste: T[], valeur: T): T[] =>
     liste.includes(valeur) ? liste.filter((x) => x !== valeur) : [...liste, valeur];
-
-  const toggleMaladieParcelle = (nom: string) =>
-    setMaladiesParcelle((prev) =>
-      prev.includes(nom) ? prev.filter((x) => x !== nom) : [...prev, nom],
-    );
 
   // --- Bloc C : référentiel géographique (délégation → ville) ---
   const [delegations, setDelegations] = useState<Delegation[]>([]);
@@ -665,9 +656,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             ? autresPrecision.trim() || undefined
             : undefined,
           pratiques: buildPratiques(),
-          // Libellés du référentiel, séparés par « ; ».
-          maladiesObservees: maladiesParcelle.length ? maladiesParcelle.join(' ; ') : undefined,
-          maladiesNonListees: maladiesAutre.trim() || undefined,
+          // Pas de champ « maladies observées » ici : l'état sanitaire est relevé
+          // sujet par sujet au Bloc D (mesures), avec photo de diagnostic.
           productionEstimee: parseNum(productionEstimee),
           uniteProduction: UniteProduction.KG_PAR_AN,
         },
@@ -1106,41 +1096,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
             <View style={styles.divider} />
 
-            {/* Maladies observées : mêmes valeurs que le Bloc D (référentiel) */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
-                Maladies & attaques observées{' '}
-                <Text style={styles.optionalTag}>(plusieurs choix possibles)</Text>
-              </Text>
-              <View style={styles.chipsWrap}>
-                {maladieOptions.map((o) => {
-                  const active = maladiesParcelle.includes(o.nom);
-                  return (
-                    <TouchableOpacity
-                      key={o.key}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => toggleMaladieParcelle(o.nom)}
-                      activeOpacity={0.8}
-                    >
-                      {active && (
-                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
-                      )}
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.nom}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <Text style={[styles.optionalTag, { marginTop: 8 }]}>
-                Autre constat, absent de la liste
-              </Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="ex: dessèchement inexpliqué des cabosses"
-                placeholderTextColor={colors.textMuted}
-                value={maladiesAutre}
-                onChangeText={setMaladiesAutre}
-              />
-            </View>
+            {/* Pas de saisie de l'état sanitaire ici : il est relevé sujet par
+                sujet au Bloc D (état de santé, maladie du référentiel et photo
+                de diagnostic obligatoire). Le redemander à la parcelle
+                produisait une donnée déclarative redondante, et deux réponses
+                possiblement contradictoires pour un même constat. */}
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Estimation de Production (kg/an)</Text>
@@ -1517,27 +1477,16 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             {draft.etatSanitaire === EtatSanitaire.MALADE && (
               <View style={styles.maladieBox}>
                 <Text style={styles.inputLabel}>Maladie *</Text>
-                <View style={styles.chipsWrap}>
-                  {maladieOptions.map((o) => {
-                    const active = draft.maladieKey === o.key;
-                    return (
-                      <TouchableOpacity
-                        key={o.key}
-                        style={[styles.chip, active && styles.chipActive]}
-                        onPress={() =>
-                          patchDraft({ maladieKey: active ? null : o.key, maladieAutre: '' })
-                        }
-                        activeOpacity={0.8}
-                      >
-                        {active && (
-                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
-                        )}
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.nom}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={[styles.optionalTag, { marginTop: 8 }]}>
+                {/* Liste déroulante : le référentiel s'enrichit au fil des
+                    validations, des chips finiraient par occuper tout l'écran. */}
+                <SelectField
+                  title="Maladie observée"
+                  placeholder="Choisir dans la liste…"
+                  value={draft.maladieKey}
+                  options={maladieOptions.map((o) => ({ key: o.key, label: o.nom }))}
+                  onChange={(key) => patchDraft({ maladieKey: key, maladieAutre: '' })}
+                />
+                <Text style={[styles.optionalTag, { marginTop: 10 }]}>
                   Maladie absente de la liste ? Saisissez-la : elle sera proposée à tous les agents
                   après validation par l'administration.
                 </Text>

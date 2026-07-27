@@ -319,6 +319,8 @@ export interface ParcelleLocal {
   typeIntrants?: string;
   raisonNonUtilisationIntrants?: string;
   autresEntretiens?: string;
+  // État sanitaire au niveau parcelle : déprécié, retiré de la saisie du Bloc B.
+  // Relevé par sujet au Bloc D. Conservé pour lire les collectes antérieures.
   maladiesObservees?: string;
   ancienneteMaladies?: string;
   maladiesNonListees?: string;
