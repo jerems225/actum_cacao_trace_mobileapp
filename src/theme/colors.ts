@@ -27,10 +27,23 @@ export const colors = {
   // Status & Badges
   conformiteSuccess: '#10B981',
   conformiteBadgeBg: '#D1FAE5',
-  warning: '#F59E0B',
-  warningBg: '#FEF3C7',
-  error: '#EF4444',
+  // Avertissement : ambre RABAISSÉ. L'ambre vif d'origine (#F59E0B sur #FEF3C7)
+  // saturait les écrans et donnait un rendu de démo. Ici la teinte reste lisible
+  // mais cesse de crier — l'information passe par le libellé, pas par la couleur.
+  warning: '#B45309',
+  warningBg: '#FDF6EC',
+  warningBorder: '#E7D3B3',
+  error: '#DC2626',
   errorBg: '#FEE2E2',
+
+  // États de collecte — gris ardoise volontairement neutre. Un brouillon n'est
+  // pas une alerte : c'est un travail en cours, il ne doit pas attirer l'œil
+  // plus que la donnée elle-même.
+  draftBg: '#F1F5F9',
+  draftBorder: '#CBD5E1',
+  draftText: '#475569',
+  // Ardoise foncée pour les libellés d'état et les titres de section.
+  slate: '#334155',
 
   // Borders & Dividers
   borderLight: '#E2E8F0',

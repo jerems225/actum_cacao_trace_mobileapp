@@ -18,6 +18,9 @@ import type { UserProfile } from '../services/auth';
 import type { ParcelleLocal, PlacetteLocal, TabType } from '../types';
 import { formatRole, StatutCollecte, STATUT_COLLECTE_LABELS } from '../types';
 
+/** Filtres de la liste des parcelles, dont le cycle de vie de la collecte. */
+type FiltreParcelle = 'all' | 'brouillon' | 'soumise' | 'geolocalisees';
+
 interface EnquetesScreenProps {
   onNavigate?: (tab: TabType) => void;
   /** Ouvre le wizard prérempli sur ce brouillon (reprise pour complétion). */
@@ -41,7 +44,11 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   const [parcelles, setParcelles] = useState<ParcelleLocal[]>([]);
   const [placettes, setPlacettes] = useState<PlacetteLocal[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'geolocalisees' | 'maladies'>('all');
+  // Le filtre « Alertes Maladie » s'appuyait sur `maladiesObservees`, champ
+  // déprécié depuis que l'état sanitaire est relevé par sujet au Bloc D : il ne
+  // ramenait plus rien. Remplacé par les filtres de cycle de vie, qui répondent
+  // à la vraie question du terrain : qu'est-ce qu'il me reste à finir ?
+  const [selectedFilter, setSelectedFilter] = useState<FiltreParcelle>('all');
   const [selectedParcelle, setSelectedParcelle] = useState<ParcelleLocal | null>(null);
 
   // Plus d'édition en ligne ici : la correction d'un brouillon passe par le
@@ -82,32 +89,49 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
     return !!plc && plc.sommets.length === 4;
   };
 
-  const filteredParcelles = parcelles.filter((p) => {
-    const matchesSearch =
-      (p.producteurNom || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.maladiesObservees || '').toLowerCase().includes(searchQuery.toLowerCase());
+  /**
+   * Un brouillon est la seule fiche encore modifiable depuis le terrain : une
+   * collecte soumise est verrouillée, sa correction relève de l'administration.
+   * Les collectes antérieures au statut (valeur absente) sont donc traitées comme
+   * soumises — elles l'ont été sous un flux qui exigeait une fiche complète.
+   */
+  const estBrouillon = (p: ParcelleLocal) => p.statutCollecte === StatutCollecte.BROUILLON;
 
-    if (!matchesSearch) return false;
-    if (selectedFilter === 'maladies') return !!p.maladiesObservees;
+  const filteredParcelles = parcelles.filter((p) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && !(p.producteurNom || '').toLowerCase().includes(q)) return false;
+
+    if (selectedFilter === 'brouillon') return estBrouillon(p);
+    if (selectedFilter === 'soumise') return !estBrouillon(p);
     if (selectedFilter === 'geolocalisees') return isGeolocalisee(p.id);
     return true;
   });
 
-  const openParcelle = (parcelle: ParcelleLocal) => setSelectedParcelle(parcelle);
+  // Compteurs affichés sur les pilules : l'agent voit d'un coup d'œil ce qui
+  // reste à finir, sans avoir à changer de filtre pour le découvrir.
+  const nbBrouillons = parcelles.filter(estBrouillon).length;
+  const nbSoumises = parcelles.length - nbBrouillons;
 
-  /**
-   * Une collecte soumise est verrouillée pour le terrain : l'agent l'a déclarée
-   * terminée. Seule l'administration peut la corriger ensuite (dashboard).
-   * Les collectes antérieures au statut (statutCollecte absent) sont traitées
-   * comme soumises — elles l'ont été sous un flux qui exigeait une fiche complète.
-   */
-  const estModifiable = (p: ParcelleLocal) => p.statutCollecte === StatutCollecte.BROUILLON;
+  const FILTRES: { cle: FiltreParcelle; libelle: string; compte?: number }[] = [
+    { cle: 'all', libelle: 'Toutes', compte: parcelles.length },
+    { cle: 'brouillon', libelle: 'Brouillons', compte: nbBrouillons },
+    { cle: 'soumise', libelle: 'Soumises', compte: nbSoumises },
+    { cle: 'geolocalisees', libelle: 'Géolocalisées' },
+  ];
+
+  const openParcelle = (parcelle: ParcelleLocal) => setSelectedParcelle(parcelle);
 
   return (
     <View style={styles.container}>
       <Header
-        title="Producteurs & Parcelles"
-        subtitle="Répertoire des producteurs et parcelles géoréférencées"
+        title="Producteurs & parcelles"
+        // Sous-titre resserré : il annonce ce que l'écran permet de faire, au
+        // lieu de paraphraser le titre.
+        subtitle={
+          nbBrouillons > 0
+            ? `${parcelles.length} fiche${parcelles.length > 1 ? 's' : ''} • ${nbBrouillons} à compléter`
+            : `${parcelles.length} fiche${parcelles.length > 1 ? 's' : ''} enregistrée${parcelles.length > 1 ? 's' : ''}`
+        }
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
         avatarUri={user?.avatarUri}
@@ -146,34 +170,30 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
           )}
         </View>
 
-        {/* Pilules de Filtres */}
+        {/* Pilules de filtres — le compteur figure sur la pilule elle-même */}
         <View style={styles.filtersRow}>
-          <TouchableOpacity
-            style={[styles.filterPill, selectedFilter === 'all' && styles.filterPillActive]}
-            onPress={() => setSelectedFilter('all')}
-          >
-            <Text style={[styles.filterText, selectedFilter === 'all' && styles.filterTextActive]}>
-              Toutes ({parcelles.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterPill, selectedFilter === 'geolocalisees' && styles.filterPillActive]}
-            onPress={() => setSelectedFilter('geolocalisees')}
-          >
-            <Text style={[styles.filterText, selectedFilter === 'geolocalisees' && styles.filterTextActive]}>
-              Géolocalisées
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterPill, selectedFilter === 'maladies' && styles.filterPillActive]}
-            onPress={() => setSelectedFilter('maladies')}
-          >
-            <Text style={[styles.filterText, selectedFilter === 'maladies' && styles.filterTextActive]}>
-              Alertes Maladie
-            </Text>
-          </TouchableOpacity>
+          {FILTRES.map((f) => {
+            const actif = selectedFilter === f.cle;
+            return (
+              <TouchableOpacity
+                key={f.cle}
+                style={[styles.filterPill, actif && styles.filterPillActive]}
+                onPress={() => setSelectedFilter(f.cle)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterText, actif && styles.filterTextActive]}>
+                  {f.libelle}
+                </Text>
+                {f.compte !== undefined && (
+                  <View style={[styles.filterCompte, actif && styles.filterCompteActif]}>
+                    <Text style={[styles.filterCompteTexte, actif && styles.filterCompteTexteActif]}>
+                      {f.compte}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Grille responsive de parcelles (Single column phone, double column tablet) */}
@@ -210,25 +230,38 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
 
                   {/* Un brouillon se repère avant tout le reste : c'est une
                       fiche à revenir compléter. */}
-                  {!estModifiable(parcelle) ? null : (
-                    <View style={[styles.badgeConforme, styles.badgeConformePending]}>
-                      <Feather name="edit-3" size={10} color={colors.warning} />
-                      <Text style={[styles.badgeConformeText, { color: colors.warning }]}>
+                  {/* Statut de collecte : gris ardoise pour un brouillon (travail
+                      en cours, pas une alerte), vert pour une fiche soumise. */}
+                  {estBrouillon(parcelle) ? (
+                    <View style={[styles.badgeConforme, styles.badgeDraft]}>
+                      <Feather name="edit-3" size={10} color={colors.draftText} />
+                      <Text style={[styles.badgeConformeText, { color: colors.draftText }]}>
                         {STATUT_COLLECTE_LABELS[StatutCollecte.BROUILLON]}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.badgeConforme}>
+                      <Feather name="check-circle" size={10} color={colors.emeraldPrimary} />
+                      <Text style={styles.badgeConformeText}>
+                        {STATUT_COLLECTE_LABELS[StatutCollecte.SOUMISE]}
                       </Text>
                     </View>
                   )}
 
-                  {isGeolocalisee(parcelle.id) ? (
+                  {isGeolocalisee(parcelle.id) && (
                     <View style={styles.badgeConforme}>
-                      <Feather name="shield" size={10} color={colors.emeraldPrimary} />
+                      <Feather name="map-pin" size={10} color={colors.emeraldPrimary} />
                       <Text style={styles.badgeConformeText}>Géolocalisée</Text>
                     </View>
-                  ) : (
-                    <View style={[styles.badgeConforme, styles.badgeConformePending]}>
-                      <Feather name="clock" size={10} color={colors.warning} />
-                      <Text style={[styles.badgeConformeText, { color: colors.warning }]}>
-                        {parcelle.synced ? 'En cours' : 'Non sync.'}
+                  )}
+
+                  {/* La synchronisation est un état technique : elle se signale
+                      seulement quand elle est en attente, et en gris. */}
+                  {!parcelle.synced && (
+                    <View style={[styles.badgeConforme, styles.badgeDraft]}>
+                      <Feather name="upload-cloud" size={10} color={colors.draftText} />
+                      <Text style={[styles.badgeConformeText, { color: colors.draftText }]}>
+                        À synchroniser
                       </Text>
                     </View>
                   )}
@@ -257,11 +290,13 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                   </View>
                 </View>
 
-                {parcelle.maladiesObservees && (
-                  <View style={styles.alertBox}>
-                    <Feather name="alert-triangle" size={12} color={colors.warning} />
-                    <Text style={styles.alertText} numberOfLines={1}>
-                      {parcelle.maladiesObservees}
+                {/* Rappel d'action sur un brouillon, en gris : c'est une
+                    invitation à finir, pas une alerte sanitaire. */}
+                {estBrouillon(parcelle) && (
+                  <View style={styles.rappelBox}>
+                    <Feather name="corner-down-right" size={12} color={colors.draftText} />
+                    <Text style={styles.rappelText} numberOfLines={1}>
+                      Fiche à compléter puis soumettre
                     </Text>
                   </View>
                 )}
@@ -329,7 +364,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                     métier (brouillon / soumise) et l'état technique d'envoi. */}
                 <Text style={styles.detailLabel}>Statut de la collecte</Text>
                 <Text style={styles.detailValue}>
-                  {estModifiable(selectedParcelle)
+                  {estBrouillon(selectedParcelle)
                     ? 'Brouillon — à compléter puis soumettre'
                     : 'Soumise — non modifiable depuis le mobile'}
                 </Text>
@@ -351,7 +386,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                 {/* Le bouton « Modifier » n'apparaît que sur un brouillon : une
                     fiche soumise est verrouillée pour le terrain. Le message
                     explique où aller plutôt que de laisser l'agent buter. */}
-                {selectedParcelle && estModifiable(selectedParcelle) ? (
+                {selectedParcelle && estBrouillon(selectedParcelle) ? (
                   // Reprise dans le parcours de saisie complet, prérempli : c'est
                   // le seul moyen de compléter les sommets GPS ou l'identité du
                   // producteur, que la modale ne couvre pas.
@@ -432,16 +467,22 @@ const styles = StyleSheet.create({
   },
   filtersRow: {
     flexDirection: 'row',
+    // Quatre pilules : elles se replient au lieu de sortir de l'écran.
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 16,
   },
   filterPill: {
-    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: colors.backgroundCard,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    maxWidth: '100%',
   },
   filterPillActive: {
     backgroundColor: colors.forestDark,
@@ -451,10 +492,31 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '600',
+    flexShrink: 1,
   },
   filterTextActive: {
     color: colors.textLight,
     fontWeight: '700',
+  },
+  // Compteur intégré à la pilule : chiffre discret, pas une pastille de couleur.
+  filterCompte: {
+    minWidth: 20,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 9,
+    backgroundColor: colors.backgroundLight,
+    alignItems: 'center',
+  },
+  filterCompteActif: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  filterCompteTexte: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: colors.textSecondary,
+  },
+  filterCompteTexteActif: {
+    color: colors.textLight,
   },
   parcellesGrid: {
     gap: 12,
@@ -521,8 +583,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
-  badgeConformePending: {
-    backgroundColor: colors.warningBg,
+  // Badge d'état neutre : brouillon, en attente de synchro… rien d'alarmant.
+  badgeDraft: {
+    backgroundColor: colors.draftBg,
+    borderWidth: 1,
+    borderColor: colors.draftBorder,
   },
   divider: {
     height: 1,
@@ -545,18 +610,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
-  alertBox: {
+  rappelBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.warningBg,
+    backgroundColor: colors.draftBg,
+    borderWidth: 1,
+    borderColor: colors.draftBorder,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
     marginTop: 12,
     gap: 6,
   },
-  alertText: {
-    color: colors.warning,
+  rappelText: {
+    color: colors.draftText,
     fontSize: 11,
     fontWeight: '600',
     flex: 1,
@@ -623,16 +690,5 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: '700',
     fontSize: 14,
-  },
-  editInput: {
-    backgroundColor: colors.backgroundLight,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: colors.textPrimary,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginTop: 4,
   },
 });

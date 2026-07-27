@@ -26,7 +26,16 @@ export const Header: React.FC<HeaderProps> = ({
   userRole = "Chef d'équipe • San-Pédro",
   avatarUri,
 }) => {
-  const { paddingHorizontal, isTablet, topInset, contentMaxWidth, scale } = useResponsive();
+  const { paddingHorizontal, isTablet, isSmallPhone, topInset, contentMaxWidth, scale } =
+    useResponsive();
+
+  // Le titre était calculé en scale(30) sur tablette, soit 39 px sur un large
+  // écran : il écrasait tout le reste et le sous-titre suivait à 18 px. On borne
+  // désormais la valeur haute et on dérive le sous-titre du titre, pour garder
+  // un rapport de hiérarchie constant quelle que soit la largeur.
+  const tailleTitre = Math.min(scale(isSmallPhone ? 20 : isTablet ? 25 : 22), 28);
+  const tailleSousTitre = Math.round(tailleTitre * 0.54);
+  const tailleLogo = Math.round(tailleTitre * 1.28);
 
   return (
     <View style={[styles.container, { paddingTop: topInset, paddingHorizontal }]}>
@@ -77,19 +86,41 @@ export const Header: React.FC<HeaderProps> = ({
           </View>
         </View>
 
-        {/* Title Section */}
+        {/* Bloc titre : logo dimensionné d'après le titre, puis sous-titre aligné
+            sur le titre (et non sur le logo) pour un bord gauche net. Le
+            sous-titre est borné en largeur : au-delà d'une soixantaine de
+            caractères par ligne, une phrase devient pénible à lire. */}
         <View style={styles.titleSection}>
           <View style={styles.titleRow}>
             <Image
               source={require('../../../assets/images/logo.png')}
-              style={styles.brandLogo}
+              style={[
+                styles.brandLogo,
+                { width: tailleLogo, height: tailleLogo, borderRadius: Math.round(tailleLogo / 4) },
+              ]}
               resizeMode="contain"
             />
-            <Text style={[styles.title, { fontSize: scale(isTablet ? 30 : 26) }]} numberOfLines={2}>
+            <Text
+              style={[
+                styles.title,
+                { fontSize: tailleTitre, lineHeight: Math.round(tailleTitre * 1.2) },
+              ]}
+              numberOfLines={2}
+            >
               {title}
             </Text>
           </View>
-          <Text style={[styles.subtitle, { fontSize: scale(13.5) }]} numberOfLines={2}>
+          <Text
+            style={[
+              styles.subtitle,
+              {
+                fontSize: tailleSousTitre,
+                lineHeight: Math.round(tailleSousTitre * 1.45),
+                marginLeft: tailleLogo + 10,
+              },
+            ]}
+            numberOfLines={2}
+          >
             {subtitle}
           </Text>
         </View>
@@ -172,7 +203,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -3,
     right: -3,
-    backgroundColor: colors.warning,
+    // Compteur de notifications en rouge sobre : c'est la convention, et l'ambre
+    // vif d'origine se confondait avec les états « en cours ».
+    backgroundColor: colors.error,
     width: 16,
     height: 16,
     borderRadius: 8,
@@ -187,7 +220,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   titleSection: {
-    gap: 2,
+    gap: 4,
   },
   titleRow: {
     flexDirection: 'row',
@@ -195,22 +228,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   brandLogo: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    // Dimensions fournies à l'usage, proportionnelles au titre.
   },
   title: {
+    flexShrink: 1,
     color: colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: -0.8,
-  },
-  titleTablet: {
-    fontSize: 34,
+    fontWeight: '800',
+    // Interlettrage discret : à -0,8 le titre se resserrait trop dès 30 px.
+    letterSpacing: -0.3,
   },
   subtitle: {
+    maxWidth: 460,
     color: colors.textSecondary,
-    fontSize: 14,
     fontWeight: '500',
   },
 });

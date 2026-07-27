@@ -2698,7 +2698,8 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
   manquantsBox: {
     backgroundColor: colors.warningBg,
     borderWidth: 1,
-    borderColor: colors.warning,
+    // Liseré assagi : le cadre délimite sans cerner de couleur vive.
+    borderColor: colors.warningBorder,
     borderRadius: 12,
     padding: scale(13),
     marginBottom: scale(12),
