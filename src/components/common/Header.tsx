@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, useResponsive } from '../../theme';
+import { useResponsive, useTheme } from '../../theme';
 
 interface HeaderProps {
   title?: string;
@@ -28,6 +28,9 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { paddingHorizontal, isTablet, isSmallPhone, topInset, contentMaxWidth, scale } =
     useResponsive();
+  // Les couleurs viennent de la palette active : l'en-tête est l'une des trois
+  // surfaces déjà migrées au thème (avec la barre d'onglets et les Paramètres).
+  const { palette } = useTheme();
 
   // Le titre était calculé en scale(30) sur tablette, soit 39 px sur un large
   // écran : il écrasait tout le reste et le sous-titre suivait à 18 px. On borne
@@ -38,7 +41,12 @@ export const Header: React.FC<HeaderProps> = ({
   const tailleLogo = Math.round(tailleTitre * 1.28);
 
   return (
-    <View style={[styles.container, { paddingTop: topInset, paddingHorizontal }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: topInset, paddingHorizontal, backgroundColor: palette.backgroundLight },
+      ]}
+    >
       <View style={[styles.inner, { maxWidth: contentMaxWidth }]}>
         {/* Top Bar with Agent profile & Action buttons */}
         <View style={styles.topRow}>
@@ -57,28 +65,40 @@ export const Header: React.FC<HeaderProps> = ({
               />
             )}
             <View style={styles.agentTextWrap}>
-              <Text style={styles.agentName} numberOfLines={1}>{userName}</Text>
-              <Text style={styles.agentRole} numberOfLines={1}>{userRole}</Text>
+              <Text style={[styles.agentName, { color: palette.textPrimary }]} numberOfLines={1}>
+                {userName}
+              </Text>
+              <Text style={[styles.agentRole, { color: palette.textSecondary }]} numberOfLines={1}>
+                {userRole}
+              </Text>
             </View>
           </TouchableOpacity>
 
           <View style={styles.topActions}>
             <TouchableOpacity
-              style={styles.circlePlusBtn}
+              style={[styles.circlePlusBtn, { backgroundColor: palette.pillBlack }]}
               onPress={onNewAction}
               activeOpacity={0.8}
             >
-              <Feather name="plus" size={18} color="#FFF" />
+              <Feather name="plus" size={18} color={palette.textLight} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.pillBellBtn}
+              style={[
+                styles.pillBellBtn,
+                { backgroundColor: palette.backgroundCard, borderColor: palette.borderLight },
+              ]}
               onPress={onNotificationPress}
               activeOpacity={0.8}
             >
-              <Feather name="bell" size={18} color={colors.textPrimary} />
+              <Feather name="bell" size={18} color={palette.textPrimary} />
               {unreadCount > 0 && (
-                <View style={styles.badgeDot}>
+                <View
+                  style={[
+                    styles.badgeDot,
+                    { backgroundColor: palette.error, borderColor: palette.backgroundLight },
+                  ]}
+                >
                   <Text style={styles.badgeText}>{unreadCount}</Text>
                 </View>
               )}
@@ -103,7 +123,11 @@ export const Header: React.FC<HeaderProps> = ({
             <Text
               style={[
                 styles.title,
-                { fontSize: tailleTitre, lineHeight: Math.round(tailleTitre * 1.2) },
+                {
+                  color: palette.textPrimary,
+                  fontSize: tailleTitre,
+                  lineHeight: Math.round(tailleTitre * 1.2),
+                },
               ]}
               numberOfLines={2}
             >
@@ -114,6 +138,7 @@ export const Header: React.FC<HeaderProps> = ({
             style={[
               styles.subtitle,
               {
+                color: palette.textSecondary,
                 fontSize: tailleSousTitre,
                 lineHeight: Math.round(tailleSousTitre * 1.45),
                 marginLeft: tailleLogo + 10,
@@ -129,9 +154,10 @@ export const Header: React.FC<HeaderProps> = ({
   );
 };
 
+// Les couleurs de cette feuille sont fournies à l'usage depuis la palette
+// active : seules la géométrie et la typographie sont figées ici.
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.backgroundLight,
     paddingBottom: 16,
   },
   inner: {
@@ -161,12 +187,10 @@ const styles = StyleSheet.create({
     borderColor: '#FFF',
   },
   agentName: {
-    color: colors.textPrimary,
     fontWeight: '800',
     fontSize: 15,
   },
   agentRole: {
-    color: colors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
     marginTop: 1,
@@ -180,7 +204,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.pillBlack,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -193,9 +216,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFF',
     borderWidth: 1,
-    borderColor: colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -205,14 +226,12 @@ const styles = StyleSheet.create({
     right: -3,
     // Compteur de notifications en rouge sobre : c'est la convention, et l'ambre
     // vif d'origine se confondait avec les états « en cours ».
-    backgroundColor: colors.error,
     width: 16,
     height: 16,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFF',
   },
   badgeText: {
     color: '#FFF',
@@ -232,14 +251,12 @@ const styles = StyleSheet.create({
   },
   title: {
     flexShrink: 1,
-    color: colors.textPrimary,
     fontWeight: '800',
     // Interlettrage discret : à -0,8 le titre se resserrait trop dès 30 px.
     letterSpacing: -0.3,
   },
   subtitle: {
     maxWidth: 460,
-    color: colors.textSecondary,
     fontWeight: '500',
   },
 });

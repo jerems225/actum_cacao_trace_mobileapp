@@ -60,4 +60,7 @@ export const StorageKeys = {
   // Référentiels mesures (espèces / maladies) mis en cache pour l'offline.
   ESPECES: 'especes',
   MALADIES: 'maladies',
+  // Préférences de l'agent sur CET appareil (thème, notifications). Elles ne
+  // partent pas au serveur : elles décrivent l'appareil, pas le compte.
+  PREFERENCES: 'preferences',
 } as const;
