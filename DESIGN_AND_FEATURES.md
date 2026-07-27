@@ -22,28 +22,44 @@ L'application mobile a été conçue en s'inspirant directement de la maquette d
 ### 1 bis. Bloc B4 — Pratiques culturales, disposition retenue
 
 Le questionnaire papier présente le B4 en tableau : 3 colonnes (Entretien /
-Tailles / Engrais) × 4 rubriques. Un tableau ne tient pas sur un écran de
-téléphone — la structure a donc été **pivotée en onglets**, un par volet, comme
-les sous-placettes du Bloc D que l'agent connaît déjà.
+Tailles / Engrais) × 4 rubriques (Types de pratiques, Agent(s) pratiquant(s),
+Fréquence, Nombre de fois par an). Un tableau à 3 colonnes ne tient pas sur un
+écran de téléphone — la structure est donc **pivotée : un volet à la fois**.
+
+Le risque de cette bascule est que l'agent perde le fil de la colonne qu'il
+remplit. Trois repères l'en empêchent : les onglets d'accès, un **bandeau qui
+nomme le volet actif**, et l'**état d'avancement** de chaque volet.
 
 ```
-B4 — Pratiques culturales (plusieurs réponses possibles)
-[✓ Entretien] [✓ Tailles] [ Engrais ] [ Aucune pratique ] [ Autres ]
+Pratiques culturales (plusieurs réponses possibles)
+[✓ Entretien] [✓ Tailles] [✓ Engrais] [ Aucune pratique ] [ Autres ]
+Entretien, Tailles et Engrais ouvrent chacun un détail à renseigner.
+Aucune pratique et Autres demandent une précision écrite.
 
-┌───────────┬─────────┐
-│ Entretien │ Tailles │   ← seuls les volets cochés apparaissent
-┴───────────┴──────────────────────────
-  Types de pratiques      (propres au volet)
-  Agent(s) pratiquant(s)  (mêmes options partout)
-  Fréquence               (choix unique)
-  Nombre de fois par an
+┌─────────────────────────────────────────────────┐
+│ DÉTAIL DES PRATIQUES            1/3 complété   │
+│ [✓ Entretien] [○ Tailles] [⊖ Engrais]          │  ← onglets + état
+│ ┃ 📋 TAILLES              volet 2 sur 3        │  ← bandeau d'identité
+│                                                 │
+│ Types de pratiques                              │
+│ [ Égourmandage ] [ Plantes parasitaires ] …     │
+│ Agent(s) pratiquant(s)                          │
+│ [ Planteur ] [ Manœuvre ] [ Agent ANADER ] …    │
+│ Fréquence                                       │
+│ [ Mensuel ] [ Trimestriel ] [ Semestriel ] …    │
+│ Nombre de fois par an   [    ]                  │
+└─────────────────────────────────────────────────┘
 ```
 
 | Règle | Comportement |
 |---|---|
+| **Titre de section retiré** | L'écran annonce déjà « Bloc B » : réafficher « B4 — Pratiques culturales » était redondant. |
 | **Onglets pilotés par les cases** | Cocher « Engrais » fait apparaître son onglet ; le décocher le fait disparaître. L'onglet actif est recalculé, jamais laissé sur un volet décoché. |
+| **Bandeau d'identité** | Le nom du volet actif est rappelé juste au-dessus des rubriques, avec son rang (« volet 2 sur 3 »). Après un défilement, la question « je remplis quelle colonne ? » ne se pose plus. |
+| **Cadre visuel** | Le détail est encadré et sur fond légèrement teinté : on voit où commence et où finit la colonne du tableau papier. |
+| **État par volet** | Pastille sur chaque onglet — plein = complété (types + agents + fréquence renseignés), creux = entamé, barré = pas encore touché. Compteur « n/3 complété » en tête. Le nombre de fois par an n'entre pas dans le compte : la case est vide sur le papier, tous les producteurs ne la connaissent pas. |
 | **Un état par volet** | Entretien, Tailles et Engrais ne partagent aucun champ — même principe que les brouillons par sous-placette du Bloc D. |
-| **Repère d'avancement** | Un point `•` sur l'onglet dès qu'un type est coché, pour repérer un volet encore vide. |
+| **Effet des cases annoncé** | Une ligne d'aide explique que les trois premières cases ouvrent un détail et les deux dernières un champ texte, au lieu de le laisser découvrir en tâtonnant. |
 | **Exclusion logique** | « Aucune pratique » décoche les trois volets, et inversement. Une fiche contradictoire ne peut pas être produite. |
 | **Précisions conditionnelles** | Les champs « Autres : … » (types, agents, fréquence) n'apparaissent **que** si la case correspondante est cochée, et disparaissent avec elle. |
 | **B4.1 / B4.2** | Cocher « Aucune pratique » ou « Autres » ouvre le champ de précision, obligatoire pour passer à l'étape suivante. |

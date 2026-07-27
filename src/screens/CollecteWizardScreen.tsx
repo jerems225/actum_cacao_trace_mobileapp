@@ -193,6 +193,21 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     voletActif && voletsCoches.includes(voletActif) ? voletActif : voletsCoches[0] ?? null;
   const detailCourant = voletCourant ? voletsDetail[voletCourant] : null;
 
+  /** Un volet est « entamé » dès qu'une case a été cochée quelque part. */
+  const voletEntame = (v: VoletPratique) => {
+    const d = voletsDetail[v];
+    return d.types.length > 0 || d.agents.length > 0 || d.frequence !== null;
+  };
+  /**
+   * Un volet est « complété » quand les trois rubriques à cocher du questionnaire
+   * ont une réponse. Le nombre de fois par an n'entre pas dans le compte : la
+   * case est vide sur le formulaire papier, tous les producteurs ne le savent pas.
+   */
+  const voletComplet = (v: VoletPratique) => {
+    const d = voletsDetail[v];
+    return d.types.length > 0 && d.agents.length > 0 && d.frequence !== null;
+  };
+
   const patchVolet = (patch: Partial<VoletDraft>) => {
     if (!voletCourant) return;
     setVoletsDetail((prev) => ({
@@ -887,13 +902,13 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               />
             </View>
 
-            {/* ---------- B4 — Pratiques culturales ---------- */}
+            {/* ---------- Pratiques culturales (B4 du questionnaire) ----------
+                Pas de titre de section ici : l'écran annonce déjà « Bloc B ».  */}
             <View style={styles.divider} />
-            <Text style={styles.sectionMini}>B4 — Pratiques culturales</Text>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>
-                Pratiques déclarées{' '}
+                Pratiques culturales{' '}
                 <Text style={styles.optionalTag}>(plusieurs réponses possibles)</Text>
               </Text>
               <View style={styles.chipsWrap}>
@@ -916,6 +931,12 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   );
                 })}
               </View>
+              {/* Les cinq cases n'ont pas le même effet : autant le dire, plutôt
+                  que de laisser l'agent découvrir ce qui s'ouvre en tâtonnant. */}
+              <Text style={styles.helperText}>
+                Entretien, Tailles et Engrais ouvrent chacun un détail à renseigner.
+                {' '}Aucune pratique et Autres demandent une précision écrite.
+              </Text>
             </View>
 
             {/* B4.1 — précision demandée quand « Aucune pratique » est cochée */}
@@ -948,27 +969,49 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </View>
             )}
 
-            {/* Détail par volet : onglets, comme les sous-placettes du Bloc D.
-                Seuls les volets cochés ci-dessus apparaissent. */}
+            {/* Détail par volet. Le questionnaire papier est un tableau
+                3 colonnes × 4 rubriques ; sur un téléphone il devient un volet
+                à la fois. Pour que l'agent ne perde jamais le fil de la colonne
+                qu'il remplit : onglets d'accès + bandeau nommant le volet actif
+                + état d'avancement de chaque volet. */}
             {voletCourant && detailCourant && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Détail par pratique</Text>
+              <View style={styles.voletBloc}>
+                <View style={styles.voletEntete}>
+                  <Text style={styles.voletEnteteTitre}>Détail des pratiques</Text>
+                  <Text style={styles.voletEnteteCompteur}>
+                    {voletsCoches.filter(voletComplet).length}/{voletsCoches.length} complété
+                    {voletsCoches.filter(voletComplet).length > 1 ? 's' : ''}
+                  </Text>
+                </View>
+
                 {voletsCoches.length > 1 && (
-                  <View style={styles.spSelector}>
+                  <View style={styles.voletTabs}>
                     {voletsCoches.map((v) => {
                       const active = v === voletCourant;
-                      // Un volet est « entamé » dès qu'un type est coché : le
-                      // point permet de repérer un onglet encore vide.
-                      const entame = voletsDetail[v].types.length > 0;
+                      const complet = voletComplet(v);
+                      const entame = voletEntame(v);
                       return (
                         <TouchableOpacity
                           key={v}
-                          style={[styles.spButton, active && styles.spButtonActive]}
+                          style={[styles.voletTab, active && styles.voletTabActive]}
                           onPress={() => setVoletActif(v)}
+                          activeOpacity={0.8}
                         >
-                          <Text style={[styles.spText, active && styles.spTextActive]}>
+                          {/* Pastille d'état : plein = complet, creux = entamé,
+                              rien = pas encore touché. */}
+                          <Feather
+                            name={complet ? 'check-circle' : entame ? 'circle' : 'minus-circle'}
+                            size={13}
+                            color={
+                              active
+                                ? '#FFFFFF'
+                                : complet
+                                  ? colors.emeraldPrimary
+                                  : colors.textMuted
+                            }
+                          />
+                          <Text style={[styles.voletTabText, active && styles.voletTabTextActive]}>
                             {PRATIQUE_RETENUE_LABELS[v]}
-                            {entame ? ' •' : ''}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -976,8 +1019,22 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   </View>
                 )}
 
+                {/* Bandeau d'identité : la question « je remplis quoi ? » ne doit
+                    jamais se poser, même après un défilement. */}
+                <View style={styles.voletBandeau}>
+                  <Feather name="clipboard" size={14} color={colors.emeraldPrimary} />
+                  <Text style={styles.voletBandeauTexte}>
+                    {PRATIQUE_RETENUE_LABELS[voletCourant].toUpperCase()}
+                  </Text>
+                  {voletsCoches.length > 1 && (
+                    <Text style={styles.voletBandeauRang}>
+                      volet {voletsCoches.indexOf(voletCourant) + 1} sur {voletsCoches.length}
+                    </Text>
+                  )}
+                </View>
+
                 {/* Types de pratiques — options propres au volet */}
-                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Types de pratiques</Text>
+                <Text style={styles.rubriqueLabel}>Types de pratiques</Text>
                 <View style={styles.chipsWrap}>
                   {TYPES_PAR_VOLET[voletCourant].map((t) => {
                     const active = detailCourant.types.includes(t.code);
@@ -1009,7 +1066,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 )}
 
                 {/* Agent(s) pratiquant(s) */}
-                <Text style={[styles.inputLabel, { marginTop: 16 }]}>Agent(s) pratiquant(s)</Text>
+                <Text style={styles.rubriqueLabel}>Agent(s) pratiquant(s)</Text>
                 <View style={styles.chipsWrap}>
                   {Object.values(AgentPratiquant).map((a) => {
                     const active = detailCourant.agents.includes(a);
@@ -1041,7 +1098,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 )}
 
                 {/* Fréquence — choix unique */}
-                <Text style={[styles.inputLabel, { marginTop: 16 }]}>Fréquence</Text>
+                <Text style={styles.rubriqueLabel}>Fréquence</Text>
                 <View style={styles.chipsWrap}>
                   {Object.values(FrequencePratique).map((f) => {
                     const active = detailCourant.frequence === f;
@@ -1079,8 +1136,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 )}
 
                 {/* Nombre de fois par an */}
-                <View style={[styles.inputGroup, { marginTop: 16 }]}>
-                  <Text style={styles.inputLabel}>Nombre de fois par an</Text>
+                <View style={{ marginTop: 4 }}>
+                  <Text style={styles.rubriqueLabel}>Nombre de fois par an</Text>
                   <TextInput
                     style={styles.textInput}
                     keyboardType="number-pad"
@@ -1923,6 +1980,88 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 15,
   },
+  // --- Pratiques culturales (B4) : détail par volet ---
+  // Le détail est encadré et légèrement détaché du reste du bloc B : l'agent voit
+  // d'un coup d'œil où commence et où finit la colonne du tableau papier.
+  voletBloc: {
+    marginTop: 4,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  voletEntete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  voletEnteteTitre: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: colors.textSecondary,
+  },
+  voletEnteteCompteur: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.emeraldPrimary,
+  },
+  voletTabs: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  voletTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: 10,
+    backgroundColor: colors.backgroundCard,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  voletTabActive: {
+    backgroundColor: colors.emeraldPrimary,
+    borderColor: colors.emeraldPrimary,
+  },
+  voletTabText: { fontSize: 12.5, fontWeight: '600', color: colors.textPrimary },
+  voletTabTextActive: { color: colors.textLight },
+  // Bandeau d'identité : répond en permanence à « quelle colonne je remplis ? ».
+  voletBandeau: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 9,
+    backgroundColor: colors.mintBadge,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.emeraldPrimary,
+  },
+  voletBandeauTexte: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: colors.emeraldPrimary,
+  },
+  voletBandeauRang: { fontSize: 11, color: colors.textSecondary },
+  // Libellé de rubrique = ligne du tableau papier (Types, Agents, Fréquence…).
+  rubriqueLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+
   spSelector: {
     flexDirection: 'row',
     gap: 6,
