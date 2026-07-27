@@ -12,8 +12,12 @@ import { Header } from '../components/common/Header';
 import { colors, useResponsive } from '../theme';
 import { offlineStorage } from '../services/storage';
 import type { UserProfile } from '../services/auth';
-import type { PlacetteLocal, TabType } from '../types';
-import { formatRole } from '../types';
+import type { PlacetteLocal, TabType, PointGPS } from '../types';
+import { formatRole, TypePoint } from '../types';
+
+/** Ne garde que les sommets (S) — exclut milieux Mi/Mc — pour le polygone. */
+const isSommet = (s: PointGPS) =>
+  s.typePoint !== TypePoint.MILIEU_INTERMEDIAIRE && s.typePoint !== TypePoint.MILIEU_CENTRAL;
 
 interface CarteScreenProps {
   onNavigate?: (tab: TabType) => void;
@@ -78,11 +82,11 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
             <View style={styles.polygonSimulated}>
               <Text style={styles.polygonLabel}>{selectedPlacette.numeroPlacette}</Text>
               <Text style={styles.polygonSub}>
-                {selectedPlacette.sommets.length}/4 sommets validés (EPSG:4326)
+                {selectedPlacette.sommets.filter(isSommet).length}/4 sommets validés (EPSG:4326)
               </Text>
-              
+
               {/* Sommets GPS */}
-              {selectedPlacette.sommets.map((s) => (
+              {selectedPlacette.sommets.filter(isSommet).map((s) => (
                 <View key={s.ordreSommet} style={styles.vertexMarker}>
                   <Text style={styles.vertexText}>S{s.ordreSommet}</Text>
                 </View>
@@ -138,7 +142,7 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
                   {plc.numeroPlacette}
                 </Text>
                 <Text style={[styles.trayCardSub, selectedPlacette?.id === plc.id && styles.textLightSub]}>
-                  {plc.village || 'San-Pédro'} • {plc.sommets.length} sommets
+                  {plc.village || 'San-Pédro'} • {plc.sommets.filter(isSommet).length} sommets
                 </Text>
               </View>
             </TouchableOpacity>
