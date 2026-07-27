@@ -82,6 +82,7 @@ class NotificationService {
     type: NotificationType,
     title: string,
     body: string,
+    cible?: Pick<AppNotification, 'cibleOnglet' | 'cibleParcelleId'>,
   ): Promise<AppNotification> {
     const notif: AppNotification = {
       id: generateId('notif'),
@@ -90,6 +91,7 @@ class NotificationService {
       body,
       timestamp: nowIso(),
       read: false,
+      ...cible,
     };
     await notificationRepository.add(notif);
 
@@ -106,32 +108,40 @@ class NotificationService {
 
   // --- Helpers métier ---
 
-  notifyCollecteEnregistree(parcelleNom: string) {
+  /** `parcelleId` permet d'ouvrir directement la fiche depuis la notification. */
+  notifyCollecteEnregistree(parcelleNom: string, parcelleId?: string) {
     return this.sendLocalNotification(
       'COLLECTE',
-      'Collecte enregistrée 🌱',
-      `Les données de la parcelle de ${parcelleNom} ont été enregistrées pour le suivi de production.`,
+      'Collecte enregistrée',
+      `La fiche de ${parcelleNom} est enregistrée sur votre appareil.`,
+      { cibleOnglet: 'enquetes', cibleParcelleId: parcelleId },
     );
   }
 
   notifySyncComplete(count: number) {
     return this.sendLocalNotification(
       'SYNC',
-      'Synchronisation Réussie 🔄',
-      `${count} enregistrement(s) terrain synchronisé(s) vers le serveur CacaoTrace.`,
+      'Envoi terminé',
+      `${count} collecte(s) envoyée(s) au serveur.`,
+      { cibleOnglet: 'sync' },
     );
   }
 
   notifySanitaryAlert(village: string, maladie: string) {
     return this.sendLocalNotification(
       'SANITARY_ALERT',
-      'Alerte sanitaire ⚠️',
-      `Diagnostic ${maladie} signalé à ${village}. Consulter le protocole de traitement.`,
+      'Alerte sanitaire',
+      `${maladie} signalée à ${village}. Consultez le protocole de traitement.`,
+      { cibleOnglet: 'enquetes' },
     );
   }
 
   getNotifications(): Promise<AppNotification[]> {
     return notificationRepository.findAll();
+  }
+
+  markAsRead(id: string): Promise<void> {
+    return notificationRepository.markRead(id);
   }
 
   markAllAsRead(): Promise<void> {

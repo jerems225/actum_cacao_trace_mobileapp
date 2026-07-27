@@ -18,6 +18,7 @@ import { settingsService } from './src/services/settings';
 import { referentielsService } from './src/services/referentiels';
 import { authService, UserProfile } from './src/services/auth';
 import { notificationService, AppNotification } from './src/services/notification';
+import { toast } from './src/components/common/Toast';
 import { colors } from './src/theme';
 import type { TabType } from './src/types';
 
@@ -37,6 +38,8 @@ export default function App() {
    * Non nul = le wizard s'ouvre prérempli et enverra une modification.
    */
   const [collecteEnEdition, setCollecteEnEdition] = useState<string | null>(null);
+  /** Fiche à ouvrir dans « Enquêtes » à l'arrivée (depuis une notification). */
+  const [parcelleAOuvrir, setParcelleAOuvrir] = useState<string | null>(null);
 
   /** Ouvre le wizard sur une collecte existante (reprise d'un brouillon). */
   const ouvrirCollecteEnEdition = (parcelleId: string) => {
@@ -51,6 +54,7 @@ export default function App() {
    */
   const changerOnglet = (tab: TabType) => {
     setCollecteEnEdition(null);
+    setParcelleAOuvrir(null);
     setActiveTab(tab);
   };
 
@@ -102,6 +106,31 @@ export default function App() {
     const notifs = await notificationService.getNotifications();
     setNotifications(notifs);
     setUnreadCount(0);
+  };
+
+  /**
+   * Touche sur une notification : elle est marquée lue, puis on ouvre sa cible.
+   * Si elle désigne une fiche qui n'existe plus en local, on ouvre malgré tout
+   * l'onglet et on le dit — plutôt que de laisser l'appui sans effet visible.
+   */
+  const handleNotificationSelect = async (notification: AppNotification) => {
+    await notificationService.markAsRead(notification.id);
+    setNotifications(await notificationService.getNotifications());
+    setUnreadCount(await notificationService.getUnreadCount());
+
+    if (!notification.cibleOnglet) return; // Notification purement informative.
+    setNotifModalVisible(false);
+
+    if (notification.cibleParcelleId) {
+      const existe = await offlineStorage.getCollecte(notification.cibleParcelleId);
+      if (existe) {
+        setParcelleAOuvrir(notification.cibleParcelleId);
+      } else {
+        toast.show("Cette fiche n'existe plus sur l'appareil.", 'error');
+      }
+    }
+    setCollecteEnEdition(null);
+    setActiveTab(notification.cibleOnglet);
   };
 
   const handleProfileUpdated = (updatedUser: UserProfile) => {
@@ -161,7 +190,14 @@ export default function App() {
       case 'home':
         return <HomeScreen {...screenProps} />;
       case 'enquetes':
-        return <EnquetesScreen {...screenProps} onEditCollecte={ouvrirCollecteEnEdition} />;
+        return (
+          <EnquetesScreen
+            {...screenProps}
+            onEditCollecte={ouvrirCollecteEnEdition}
+            ouvrirParcelleId={parcelleAOuvrir}
+            onParcelleOuverte={() => setParcelleAOuvrir(null)}
+          />
+        );
       case 'collecte':
         return (
           <CollecteWizardScreen
@@ -202,6 +238,7 @@ export default function App() {
         onClose={() => setNotifModalVisible(false)}
         notifications={notifications}
         onMarkAllAsRead={handleMarkAllRead}
+        onNotificationSelect={handleNotificationSelect}
       />
       <ToastHost />
     </View>

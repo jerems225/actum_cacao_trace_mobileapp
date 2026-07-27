@@ -192,9 +192,47 @@ Deux niveaux complémentaires, centralisés dans `src/utils/champs.ts` :
 guide l'agent, le backend refuse pour de bon.
 
 ### 2. Architecture Offline-First & Synchronisation
+
 - **Moteur de Stockage Local** (`offlineStorage.ts`) : Sauvegarde locale instantanée sans connexion Internet.
-- **File d'attente Sync Queue** : Stocke toutes les actions (`CREATE`, `UPDATE`) sous forme de batchs.
-- **Centre de Sync** (`SyncScreen.tsx` & `api.ts`) : Bouton "Synchroniser le Batch", gestion des retentatives et envoi vers l'API backend `/api/v1/sync/push`.
+- **File d'attente** : une ligne par entité (`CREATE`, `UPDATE`, `DELETE`), envoyée par vagues avec remappage des clés étrangères.
+
+**L'écran « Envoi des collectes » ne montre pas cette mécanique.** Il raisonne en
+**collectes**, pas en enregistrements : une seule fiche produit une dizaine de
+lignes internes (producteur, parcelle, placette, sous-placettes, chaque mesure),
+et annoncer « 47 enregistrements » à un agent qui a saisi trois fiches n'informe
+pas — cela inquiète.
+
+| Avant | Après |
+|---|---|
+| « File de Synchronisation » | « Envoi des collectes » |
+| « Mode Offline-First Actif » | « Fonctionne sans réseau » |
+| « Éléments en Attente dans la Queue Local » | « Collectes en attente d'envoi » |
+| « Parcelle — CREATE » | « KOUASSI Jean-Baptiste », saisie le 27/07/2026 |
+| « Synchroniser le Batch Maintenant » | « Envoyer maintenant » |
+| « Historique des Synchronisations » | « Derniers envois » |
+| `SUCCESS` / `PARTIAL` / `ERROR` | Réussi / Partiel / Échec |
+
+Les collectes en attente sont déduites de `parcelle.synced`, et le nombre envoyé
+est calculé **par différence** avant/après — donc juste en collectes, alors que le
+gestionnaire de synchronisation ne sait compter qu'en enregistrements. Les
+messages de ce gestionnaire ont d'ailleurs perdu leurs compteurs pour la même
+raison : « Envoi terminé. », « Pas de réseau : vos collectes restent enregistrées
+sur l'appareil. »
+
+### 2 bis. Notifications actionnables
+
+Chaque notification peut porter une **cible** (`cibleOnglet`, `cibleParcelleId`).
+Toucher une notification la marque lue et ouvre cette cible :
+
+- une collecte enregistrée ouvre **sa fiche** dans « Enquêtes » ;
+- si la fiche n'existe plus sur l'appareil, l'onglet s'ouvre quand même et un
+  message le dit — plutôt qu'un appui sans effet visible ;
+- une notification sans cible reste informative et se contente d'être marquée lue.
+  Le chevron n'apparaît **que** sur les notifications qui mènent quelque part :
+  promettre une navigation inexistante est pire que ne rien promettre.
+
+Le compteur d'en-tête distingue les non lues (« 3 non lues sur 12 ») et
+« Tout marquer comme lu » disparaît quand il n'y a plus rien à marquer.
 
 ### 3. Cartographie & SIG (`CarteScreen.tsx`)
 - Visualisation interactive du polygone formé par les 4 sommets.

@@ -729,9 +729,12 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           return;
         }
       } else {
-        await offlineStorage.saveCompleteCollecte(donnees);
+        const cree = await offlineStorage.saveCompleteCollecte(donnees);
+        // L'identifiant de la parcelle voyage avec la notification : la toucher
+        // ouvrira directement la fiche concernée.
         await notificationService.notifyCollecteEnregistree(
           `${donnees.producteur.prenoms} ${donnees.producteur.nom}`,
+          cree.parcelle.id,
         );
       }
 

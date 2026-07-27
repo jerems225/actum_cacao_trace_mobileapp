@@ -16,6 +16,11 @@ interface NotificationModalProps {
   onClose: () => void;
   notifications: AppNotification[];
   onMarkAllAsRead: () => void;
+  /**
+   * Touche sur une notification : la marque lue et ouvre sa cible si elle en a
+   * une. La navigation est décidée par l'appelant, qui seul connaît les onglets.
+   */
+  onNotificationSelect?: (notification: AppNotification) => void;
 }
 
 export const NotificationModal: React.FC<NotificationModalProps> = ({
@@ -23,7 +28,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   onClose,
   notifications,
   onMarkAllAsRead,
+  onNotificationSelect,
 }) => {
+  const nonLues = notifications.filter((n) => !n.read).length;
   const getIcon = (type: AppNotification['type']) => {
     switch (type) {
       case 'COLLECTE':
@@ -58,10 +65,16 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </View>
 
           <View style={styles.topActionsRow}>
-            <Text style={styles.countText}>{notifications.length} notification(s)</Text>
-            <TouchableOpacity onPress={onMarkAllAsRead}>
-              <Text style={styles.markReadText}>Tout marquer comme lu</Text>
-            </TouchableOpacity>
+            <Text style={styles.countText}>
+              {nonLues > 0
+                ? `${nonLues} non lue${nonLues > 1 ? 's' : ''} sur ${notifications.length}`
+                : `${notifications.length} notification${notifications.length > 1 ? 's' : ''}`}
+            </Text>
+            {nonLues > 0 && (
+              <TouchableOpacity onPress={onMarkAllAsRead}>
+                <Text style={styles.markReadText}>Tout marquer comme lu</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
@@ -76,10 +89,14 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             ) : (
               notifications.map((n) => {
                 const iconInfo = getIcon(n.type);
+                const ouvrable = !!n.cibleOnglet;
                 return (
-                  <View
+                  <TouchableOpacity
                     key={n.id}
                     style={[styles.notifCard, !n.read && styles.notifUnread]}
+                    onPress={() => onNotificationSelect?.(n)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
                   >
                     <View style={[styles.iconBox, { backgroundColor: iconInfo.bg }]}>
                       <Feather name={iconInfo.name} size={18} color={iconInfo.color} />
@@ -96,8 +113,16 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                       </Text>
                     </View>
 
-                    {!n.read && <View style={styles.unreadDot} />}
-                  </View>
+                    <View style={styles.notifRight}>
+                      {!n.read && <View style={styles.unreadDot} />}
+                      {/* Chevron seulement si la notification mène quelque part :
+                          promettre une navigation qui n'existe pas est pire que
+                          de ne rien promettre. */}
+                      {ouvrable && (
+                        <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                      )}
+                    </View>
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -216,12 +241,16 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 6,
   },
+  notifRight: {
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 2,
+  },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.emeraldPrimary,
-    marginTop: 4,
   },
   closeBtn: {
     backgroundColor: colors.pillBlack,

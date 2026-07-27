@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,18 +13,28 @@ import { Feather } from '@expo/vector-icons';
 import { Header } from '../components/common/Header';
 import { SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
+import type { Responsive } from '../theme/responsive';
 import { offlineStorage } from '../services/storage';
 import type { UserProfile } from '../services/auth';
 import type { ParcelleLocal, PlacetteLocal, TabType } from '../types';
 import { formatRole, StatutCollecte, STATUT_COLLECTE_LABELS } from '../types';
 
-/** Filtres de la liste des parcelles, dont le cycle de vie de la collecte. */
-type FiltreParcelle = 'all' | 'brouillon' | 'soumise' | 'geolocalisees';
+/**
+ * Filtres de la liste des collectes.
+ * Le filtre « Géolocalisées » a été retiré : les 4 sommets GPS sont exigés pour
+ * soumettre, donc toute collecte soumise l'est nécessairement — le filtre
+ * doublonnait « Soumises » sans rien apprendre.
+ */
+type FiltreParcelle = 'all' | 'brouillon' | 'soumise';
 
 interface EnquetesScreenProps {
   onNavigate?: (tab: TabType) => void;
   /** Ouvre le wizard prérempli sur ce brouillon (reprise pour complétion). */
   onEditCollecte?: (parcelleId: string) => void;
+  /** Fiche à déplier à l'arrivée sur l'écran (venue d'une notification). */
+  ouvrirParcelleId?: string | null;
+  /** Signale que la fiche demandée a été ouverte, pour ne pas la rouvrir. */
+  onParcelleOuverte?: () => void;
   onProfilePress?: () => void;
   onNotificationPress?: () => void;
   unreadCount?: number;
@@ -34,12 +44,17 @@ interface EnquetesScreenProps {
 export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   onNavigate,
   onEditCollecte,
+  ouvrirParcelleId,
+  onParcelleOuverte,
   onProfilePress,
   onNotificationPress,
   unreadCount,
   user,
 }) => {
-  const { paddingHorizontal, isTablet, cardColumns, contentStyle } = useResponsive();
+  const responsive = useResponsive();
+  const { paddingHorizontal, isTablet, cardColumns, contentStyle } = responsive;
+  // Recalculée seulement quand les dimensions changent (rotation, tablette).
+  const styles = useMemo(() => createStyles(responsive), [responsive]);
   const [loading, setLoading] = useState(true);
   const [parcelles, setParcelles] = useState<ParcelleLocal[]>([]);
   const [placettes, setPlacettes] = useState<PlacetteLocal[]>([]);
@@ -60,6 +75,16 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   useEffect(() => {
     loadData();
   }, []);
+
+  // Fiche demandée par une notification : on attend que les données soient
+  // chargées, sinon la parcelle ne serait pas encore trouvable.
+  useEffect(() => {
+    if (!ouvrirParcelleId || loading) return;
+    const cible = parcelles.find((p) => p.id === ouvrirParcelleId);
+    if (cible) setSelectedParcelle(cible);
+    onParcelleOuverte?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouvrirParcelleId, loading, parcelles]);
 
   const loadData = async () => {
     // Le nom du producteur est dénormalisé sur la parcelle (`producteurNom`) :
@@ -83,6 +108,19 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
     return placettes.find((plc) => plc.parcelleId === parcelleId);
   };
 
+  /**
+   * Lieu de la collecte, en n'assemblant que les parties réellement renseignées.
+   * L'ancienne interpolation directe affichait « undefined, Abengourou » quand le
+   * village n'avait pas été saisi — un brouillon en cours, cas parfaitement normal.
+   */
+  const lieuCollecte = (placette?: PlacetteLocal): string => {
+    if (!placette) return 'Lieu non renseigné';
+    const parties = [placette.village, placette.ville, placette.delegationRegionale]
+      .map((v) => v?.trim())
+      .filter((v): v is string => !!v);
+    return parties.length ? parties.join(' · ') : 'Lieu non renseigné';
+  };
+
   /** Une parcelle est considérée géolocalisée si sa placette possède ses 4 sommets GPS. */
   const isGeolocalisee = (parcelleId: string) => {
     const plc = getPlacetteForParcelle(parcelleId);
@@ -103,7 +141,6 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
 
     if (selectedFilter === 'brouillon') return estBrouillon(p);
     if (selectedFilter === 'soumise') return !estBrouillon(p);
-    if (selectedFilter === 'geolocalisees') return isGeolocalisee(p.id);
     return true;
   });
 
@@ -112,11 +149,10 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   const nbBrouillons = parcelles.filter(estBrouillon).length;
   const nbSoumises = parcelles.length - nbBrouillons;
 
-  const FILTRES: { cle: FiltreParcelle; libelle: string; compte?: number }[] = [
+  const FILTRES: { cle: FiltreParcelle; libelle: string; compte: number }[] = [
     { cle: 'all', libelle: 'Toutes', compte: parcelles.length },
     { cle: 'brouillon', libelle: 'Brouillons', compte: nbBrouillons },
     { cle: 'soumise', libelle: 'Soumises', compte: nbSoumises },
-    { cle: 'geolocalisees', libelle: 'Géolocalisées' },
   ];
 
   const openParcelle = (parcelle: ParcelleLocal) => setSelectedParcelle(parcelle);
@@ -124,7 +160,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   return (
     <View style={styles.container}>
       <Header
-        title="Producteurs & parcelles"
+        title="Liste des collectes"
         // Sous-titre resserré : il annonce ce que l'écran permet de faire, au
         // lieu de paraphraser le titre.
         subtitle={
@@ -213,23 +249,28 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                 onPress={() => openParcelle(parcelle)}
                 activeOpacity={0.85}
               >
+                {/* Identité seule sur sa ligne : le nom dispose de toute la
+                    largeur au lieu d'être comprimé par les badges. */}
                 <View style={styles.cardHeader}>
                   <View style={styles.avatarMini}>
                     <Text style={styles.avatarMiniText}>
-                      {(parcelle.producteurNom || 'P')[0]}
+                      {(parcelle.producteurNom || 'P').trim()[0]?.toUpperCase() ?? 'P'}
                     </Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.prodName}>
-                      {parcelle.producteurNom || 'Producteur Cacao'}
+                  <View style={styles.cardIdentite}>
+                    <Text style={styles.prodName} numberOfLines={1}>
+                      {parcelle.producteurNom || 'Producteur sans nom'}
                     </Text>
-                    <Text style={styles.prodSub}>
-                      {placette ? `${placette.village}, ${placette.delegationRegionale}` : 'Côte d\'Ivoire'}
+                    <Text style={styles.prodSub} numberOfLines={1}>
+                      {lieuCollecte(placette)}
                     </Text>
                   </View>
+                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                </View>
 
-                  {/* Un brouillon se repère avant tout le reste : c'est une
-                      fiche à revenir compléter. */}
+                {/* Badges sur leur propre rangée, qui se replie : trois badges ne
+                    tiennent pas à côté d'un nom sur un écran de téléphone. */}
+                <View style={styles.badgesRow}>
                   {/* Statut de collecte : gris ardoise pour un brouillon (travail
                       en cours, pas une alerte), vert pour une fiche soumise. */}
                   {estBrouillon(parcelle) ? (
@@ -248,10 +289,15 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                     </View>
                   )}
 
-                  {isGeolocalisee(parcelle.id) && (
-                    <View style={styles.badgeConforme}>
-                      <Feather name="map-pin" size={10} color={colors.emeraldPrimary} />
-                      <Text style={styles.badgeConformeText}>Géolocalisée</Text>
+                  {/* Le repère GPS ne se signale que s'il MANQUE quelque chose :
+                      les 4 sommets étant exigés pour soumettre, l'afficher sur
+                      une fiche complète n'apprendrait rien. */}
+                  {!isGeolocalisee(parcelle.id) && (
+                    <View style={[styles.badgeConforme, styles.badgeDraft]}>
+                      <Feather name="map-pin" size={10} color={colors.draftText} />
+                      <Text style={[styles.badgeConformeText, { color: colors.draftText }]}>
+                        GPS {placette ? placette.sommets.length : 0}/4
+                      </Text>
                     </View>
                   )}
 
@@ -417,7 +463,11 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+// Fabrique et non feuille figée : les tailles de texte suivent la classe
+// d'appareil via scale() (voir theme/responsive.ts), et le composant la
+// recalcule seulement à la rotation grâce au useMemo.
+const createStyles = ({ scale }: Responsive) =>
+  StyleSheet.create({
   // Remplace le bouton « Modifier » sur une collecte soumise : même emprise,
   // pour que la disposition du pied de modale ne bouge pas.
   verrouBox: {
@@ -434,7 +484,7 @@ const styles = StyleSheet.create({
   },
   verrouTexte: {
     flex: 1,
-    fontSize: 11.5,
+    fontSize: scale(11.5),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -463,7 +513,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: colors.textPrimary,
-    fontSize: 13.5,
+    fontSize: scale(13.5),
   },
   filtersRow: {
     flexDirection: 'row',
@@ -490,7 +540,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '600',
     flexShrink: 1,
   },
@@ -511,7 +561,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
   filterCompteTexte: {
-    fontSize: 10.5,
+    fontSize: scale(10.5),
     fontWeight: '800',
     color: colors.textSecondary,
   },
@@ -546,6 +596,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  // Bloc identité : `minWidth: 0` autorise la troncature du nom au lieu de
+  // laisser la ligne s'élargir hors de la carte.
+  cardIdentite: {
+    flex: 1,
+    minWidth: 0,
+  },
+  // Badges sur leur propre rangée, alignés sous l'identité, qui se replie.
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
   avatarMini: {
     width: 36,
     height: 36,
@@ -553,19 +617,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.mintBadge,
     alignItems: 'center',
     justifyContent: 'center',
+    // L'initiale ne doit jamais être écrasée par le texte voisin.
+    flexShrink: 0,
   },
   avatarMiniText: {
     color: colors.emeraldPrimary,
     fontWeight: '800',
-    fontSize: 14,
+    fontSize: scale(14),
   },
   prodName: {
-    fontSize: 14,
+    fontSize: scale(14),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   prodSub: {
-    fontSize: 11,
+    fontSize: scale(11),
     color: colors.textSecondary,
     marginTop: 2,
   },
@@ -573,6 +639,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.mintBadge,
+    maxWidth: '100%',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
@@ -580,8 +647,10 @@ const styles = StyleSheet.create({
   },
   badgeConformeText: {
     color: colors.emeraldPrimary,
-    fontSize: 10,
+    fontSize: scale(10),
+    lineHeight: 14,
     fontWeight: '800',
+    flexShrink: 1,
   },
   // Badge d'état neutre : brouillon, en attente de synchro… rien d'alarmant.
   badgeDraft: {
@@ -594,19 +663,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderLight,
     marginVertical: 12,
   },
+  // Trois indicateurs qui se partagent la largeur et se replient si les libellés
+  // s'allongent, plutôt qu'un space-between qui les tassait aux extrémités.
   infoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   infoItem: {
     gap: 2,
+    flexGrow: 1,
+    flexBasis: 90,
+    minWidth: 0,
   },
   infoLabel: {
-    fontSize: 11,
+    fontSize: scale(10.5),
+    lineHeight: 14,
     color: colors.textMuted,
   },
   infoValue: {
-    fontSize: 13,
+    fontSize: scale(13),
+    lineHeight: 18,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -624,7 +701,7 @@ const styles = StyleSheet.create({
   },
   rappelText: {
     color: colors.draftText,
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '600',
     flex: 1,
   },
@@ -646,17 +723,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: scale(18),
     fontWeight: '800',
     color: colors.textPrimary,
   },
   detailLabel: {
-    fontSize: 11,
+    fontSize: scale(11),
     color: colors.textMuted,
     marginTop: 12,
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: scale(14),
     fontWeight: '700',
     color: colors.textPrimary,
     marginTop: 2,
@@ -674,7 +751,7 @@ const styles = StyleSheet.create({
   closeBtnText: {
     color: colors.textLight,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: scale(14),
   },
   modalActionsRow: {
     flexDirection: 'row',
@@ -689,6 +766,7 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     color: colors.textPrimary,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: scale(14),
   },
-});
+  });
+

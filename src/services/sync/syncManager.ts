@@ -61,7 +61,7 @@ class SyncManager {
   private async doPush(): Promise<SyncOutcome> {
     const pending = await syncQueueRepository.findPending();
     if (pending.length === 0) {
-      return { reachable: true, synced: 0, failed: 0, message: 'Toutes les données sont déjà synchronisées.' };
+      return { reachable: true, synced: 0, failed: 0, message: 'Toutes vos collectes sont déjà envoyées.' };
     }
 
     if (!(await isBackendReachable())) {
@@ -69,7 +69,7 @@ class SyncManager {
         reachable: false,
         synced: 0,
         failed: 0,
-        message: `Mode hors-ligne : ${pending.length} enregistrement(s) conservé(s) localement.`,
+        message: 'Pas de réseau : vos collectes restent enregistrées sur l\'appareil.',
       };
     }
 
@@ -227,11 +227,18 @@ class SyncManager {
     return map;
   }
 
+  /**
+   * Message destiné à l'agent. Volontairement SANS compteur d'enregistrements :
+   * une seule collecte produit une dizaine de lignes internes (producteur,
+   * parcelle, placette, sous-placettes, chaque mesure). Annoncer « 47
+   * enregistrements » à qui a saisi trois fiches n'informe pas, ça inquiète.
+   * Le décompte en collectes est calculé par l'écran, qui sait le faire juste.
+   */
   private buildMessage(synced: number, failed: number): string {
-    if (synced === 0 && failed === 0) return 'Aucune donnée à synchroniser.';
-    if (failed === 0) return `${synced} enregistrement(s) synchronisé(s) avec succès.`;
-    if (synced === 0) return `Échec : ${failed} enregistrement(s) en conflit. Réessayez plus tard.`;
-    return `${synced} synchronisé(s), ${failed} en conflit (conservés localement).`;
+    if (synced === 0 && failed === 0) return 'Aucune donnée à envoyer.';
+    if (failed === 0) return 'Envoi terminé.';
+    if (synced === 0) return 'Envoi impossible pour le moment. Vos données restent sur l\'appareil.';
+    return 'Envoi partiel : le reste sera repris au prochain envoi.';
   }
 }
 

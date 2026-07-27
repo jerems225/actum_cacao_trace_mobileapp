@@ -16,7 +16,7 @@ import { ApiSyncService } from '../services/api';
 import { notificationService } from '../services/notification';
 import { toast } from '../components/common/Toast';
 import type { UserProfile } from '../services/auth';
-import type { SyncQueueRecord, SyncHistoryEntry, TabType } from '../types';
+import type { ParcelleLocal, SyncHistoryEntry, TabType } from '../types';
 import { formatRole } from '../types';
 
 interface SyncScreenProps {
@@ -36,42 +36,68 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
 }) => {
   const { paddingHorizontal, contentStyle } = useResponsive();
   const [loading, setLoading] = useState(true);
-  const [queue, setQueue] = useState<SyncQueueRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncHistory, setSyncHistory] = useState<SyncHistoryEntry[]>([]);
+  /**
+   * On raisonne en COLLECTES, pas en enregistrements techniques.
+   * La file interne contient une ligne par entité (producteur, parcelle,
+   * placette, sous-placette, chaque mesure…) : afficher « 47 enregistrements »
+   * n'aide pas un agent qui a saisi trois fiches. On liste donc les collectes
+   * dont l'envoi reste à faire, nommées par leur producteur.
+   */
+  const [collectesEnAttente, setCollectesEnAttente] = useState<ParcelleLocal[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [q, history] = await Promise.all([
-      offlineStorage.getSyncQueue(),
+    const [parcelles, history] = await Promise.all([
+      offlineStorage.getParcelles(),
       offlineStorage.getSyncHistory(),
     ]);
-    setQueue(q);
+    setCollectesEnAttente(parcelles.filter((p) => !p.synced));
     setSyncHistory(history);
     setLoading(false);
   };
 
+  /** Libellés d'issue en français : SUCCESS / PARTIAL / ERROR ne parlent qu'aux développeurs. */
+  const libelleIssue = (statut: SyncHistoryEntry['status']) =>
+    statut === 'SUCCESS' ? 'Réussi' : statut === 'PARTIAL' ? 'Partiel' : 'Échec';
+
   const handleTriggerSync = async () => {
+    const avant = collectesEnAttente.length;
     setIsSyncing(true);
     const result = await ApiSyncService.pushSyncQueue();
     setIsSyncing(false);
 
-    if (result.syncedCount > 0) {
-      await notificationService.notifySyncComplete(result.syncedCount);
+    // Décompte en COLLECTES, obtenu par différence : le gestionnaire de synchro
+    // compte des enregistrements internes, chiffre exact mais sans sens pour
+    // l'agent. Ici on mesure ce qu'il a réellement vu partir.
+    const restant = (await offlineStorage.getParcelles()).filter((p) => !p.synced).length;
+    const envoyees = Math.max(0, avant - restant);
+    if (envoyees > 0) {
+      await notificationService.notifySyncComplete(envoyees);
     }
 
     await loadData();
-    toast.show(result.message, result.failedCount > 0 ? 'error' : 'success');
+    toast.show(
+      envoyees > 0
+        ? `${envoyees} collecte${envoyees > 1 ? 's' : ''} envoyée${envoyees > 1 ? 's' : ''}.`
+        : result.message,
+      result.failedCount > 0 ? 'error' : 'success',
+    );
   };
 
   return (
     <View style={styles.container}>
       <Header
-        title="File de Synchronisation"
-        subtitle="Gestion du mode Offline-First et envoi backend"
+        title="Envoi des collectes"
+        subtitle={
+          collectesEnAttente.length > 0
+            ? `${collectesEnAttente.length} collecte${collectesEnAttente.length > 1 ? 's' : ''} en attente d'envoi`
+            : 'Toutes vos collectes sont envoyées'
+        }
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
         avatarUri={user?.avatarUri}
@@ -86,20 +112,24 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
         contentContainerStyle={[styles.scrollContent, { paddingHorizontal }, contentStyle]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Banner d'état de synchronisation */}
+        {/* Bandeau d'état : ce que l'agent doit savoir, sans jargon */}
         <View style={styles.statusCard}>
           <View style={styles.statusTop}>
             <View style={styles.statusBadge}>
               <View style={styles.statusDot} />
-              <Text style={styles.statusBadgeText}>Mode Offline-First Actif</Text>
+              <Text style={styles.statusBadgeText}>Fonctionne sans réseau</Text>
             </View>
-            <Text style={styles.queueCount}>{queue.length} en attente</Text>
+            {collectesEnAttente.length > 0 && (
+              <Text style={styles.queueCount}>
+                {collectesEnAttente.length} en attente
+              </Text>
+            )}
           </View>
 
           <Text style={styles.statusTitle}>
-            {queue.length > 0
-              ? `${queue.length} enregistrement(s) à synchroniser avec le serveur API.`
-              : 'Toutes vos données terrain sont synchronisées.'}
+            {collectesEnAttente.length > 0
+              ? `${collectesEnAttente.length} collecte${collectesEnAttente.length > 1 ? 's' : ''} enregistrée${collectesEnAttente.length > 1 ? 's' : ''} sur votre appareil, en attente d'envoi.`
+              : 'Toutes vos collectes ont été envoyées.'}
           </Text>
 
           <TouchableOpacity
@@ -112,46 +142,56 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
               <ActivityIndicator color={colors.textLight} />
             ) : (
               <>
-                <Feather name="refresh-cw" size={18} color={colors.textLight} />
-                <Text style={styles.syncButtonText}>Synchroniser le Batch Maintenant</Text>
+                <Feather name="upload-cloud" size={18} color={colors.textLight} />
+                <Text style={styles.syncButtonText}>Envoyer maintenant</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Liste des éléments en attente dans la queue local */}
-        <Text style={styles.sectionTitle}>Éléments en Attente dans la Queue Local</Text>
+        {/* Collectes en attente, nommées par leur producteur */}
+        <Text style={styles.sectionTitle}>Collectes en attente d'envoi</Text>
         {loading ? (
           <SkeletonList count={3} />
-        ) : queue.length === 0 ? (
+        ) : collectesEnAttente.length === 0 ? (
           <View style={styles.emptyBox}>
             <Feather name="check-circle" size={32} color={colors.emeraldPrimary} />
-            <Text style={styles.emptyTitle}>Queue de Synchronisation Vide</Text>
+            <Text style={styles.emptyTitle}>Rien à envoyer</Text>
             <Text style={styles.emptySub}>
-              Les parcelles, placettes et mesures capturées sont enregistrées en sécurité.
+              Vos collectes sont en sécurité sur le serveur.
             </Text>
           </View>
         ) : (
-          queue.map((item: SyncQueueRecord) => (
-            <View key={item.id} style={styles.queueItem}>
+          collectesEnAttente.map((p) => (
+            <TouchableOpacity
+              key={p.id}
+              style={styles.queueItem}
+              onPress={onNavigate ? () => onNavigate('enquetes') : undefined}
+              activeOpacity={0.8}
+            >
               <View style={styles.queueIcon}>
-                <Feather name="database" size={16} color={colors.emeraldPrimary} />
+                <Feather name="clipboard" size={16} color={colors.emeraldPrimary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.queueEntity}>{item.entity} — {item.action}</Text>
-                <Text style={styles.queueDate}>{item.createdAt.slice(0, 16)}</Text>
+                <Text style={styles.queueEntity}>
+                  {p.producteurNom || 'Collecte sans producteur'}
+                </Text>
+                <Text style={styles.queueDate}>
+                  Saisie le {p.createdAt.slice(8, 10)}/{p.createdAt.slice(5, 7)}/
+                  {p.createdAt.slice(0, 4)}
+                </Text>
               </View>
               <View style={styles.pendingBadge}>
-                <Text style={styles.pendingText}>En attente</Text>
+                <Text style={styles.pendingText}>À envoyer</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
-        {/* Historique des Syncs (persisté) */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Historique des Synchronisations</Text>
+        {/* Derniers envois */}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Derniers envois</Text>
         {syncHistory.length === 0 ? (
-          <Text style={styles.historyEmpty}>Aucune synchronisation enregistrée pour le moment.</Text>
+          <Text style={styles.historyEmpty}>Aucun envoi pour le moment.</Text>
         ) : (
           syncHistory.map((h) => (
             <View key={h.id} style={styles.historyCard}>
@@ -162,12 +202,13 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.historyText}>
-                  {h.synced} synchronisé(s){h.failed > 0 ? ` • ${h.failed} en conflit` : ''}
+                  {h.synced} envoyé{h.synced > 1 ? 's' : ''}
+                  {h.failed > 0 ? ` • ${h.failed} à reprendre` : ''}
                 </Text>
                 <Text style={styles.historyDate}>{h.date.replace('T', ' ').slice(0, 16)}</Text>
               </View>
               <Text style={[styles.successTag, h.status === 'ERROR' && { color: colors.error }]}>
-                {h.status}
+                {libelleIssue(h.status)}
               </Text>
             </View>
           ))
@@ -305,14 +346,17 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 2,
   },
+  // « À envoyer » est un état d'attente, pas un avertissement : ton neutre.
   pendingBadge: {
-    backgroundColor: colors.warningBg,
+    backgroundColor: colors.draftBg,
+    borderWidth: 1,
+    borderColor: colors.draftBorder,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
   },
   pendingText: {
-    color: colors.warning,
+    color: colors.draftText,
     fontSize: 10,
     fontWeight: '800',
   },

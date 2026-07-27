@@ -13,6 +13,14 @@ export interface AppNotification {
   body: string;
   timestamp: string;
   read: boolean;
+  /**
+   * Destination à ouvrir quand l'agent touche la notification. Optionnelle : une
+   * notification sans cible reste informative et se contente d'être marquée lue.
+   * `parcelleId` désigne une fiche locale ; si elle a disparu entre-temps, on
+   * ouvre simplement l'onglet sans faire échouer l'action.
+   */
+  cibleOnglet?: 'home' | 'enquetes' | 'collecte' | 'carte' | 'sync';
+  cibleParcelleId?: string;
 }
 
 class NotificationRepository {
@@ -25,6 +33,15 @@ class NotificationRepository {
   async add(notification: AppNotification): Promise<AppNotification> {
     const p = await getPersistence();
     return p.upsert(Collections.NOTIFICATIONS, notification);
+  }
+
+  /** Marque une seule notification comme lue (au toucher dans la liste). */
+  async markRead(id: string): Promise<void> {
+    const p = await getPersistence();
+    const items = await p.getAll<AppNotification>(Collections.NOTIFICATIONS);
+    const cible = items.find((n) => n.id === id);
+    if (!cible || cible.read) return;
+    await p.upsert(Collections.NOTIFICATIONS, { ...cible, read: true });
   }
 
   async markAllRead(): Promise<void> {
