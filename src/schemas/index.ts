@@ -1,9 +1,26 @@
+// ============================================================================
+// CacaoTrace — Schémas Zod mobile (contrôle de forme des payloads)
+// ----------------------------------------------------------------------------
+// Miroir allégé des schémas backend (backend/src/schemas/index.ts). Sert de
+// filet de sécurité avant mise en file de synchronisation.
+// Les bornes numériques viennent d'une seule source : `LIMITES`
+// (mobile/src/utils/champs.ts), elle-même alignée sur le backend.
+//
+// ⚠️ Ces schémas ne sont pas encore branchés sur le wizard de collecte, qui
+// valide en ligne champ par champ. Ils restent la référence si l'on veut
+// centraliser cette validation plus tard — d'où l'obligation de les maintenir
+// exacts : un schéma faux serait pire que pas de schéma.
+// ============================================================================
+
 import { z } from 'zod';
+import { LIMITES } from '../utils/champs';
 
 const CI_LAT_MIN = 4.0;
 const CI_LAT_MAX = 10.8;
 const CI_LON_MIN = -8.6;
 const CI_LON_MAX = -2.5;
+
+const borne = (l: { min: number; max: number }) => z.number().min(l.min).max(l.max);
 
 export const PointGPSSchema = z.object({
   ordreSommet: z.number().int().min(1).max(4),
@@ -20,13 +37,14 @@ export const PointGPSSchema = z.object({
 });
 
 export const ProducteurFormSchema = z.object({
-  nom: z.string().min(1, 'Le nom est obligatoire'),
-  prenoms: z.string().min(1, 'Les prénoms sont obligatoires'),
-  identiteProprietaire: z.string().optional(),
-  trancheAge: z.enum(['MOINS_25', 'DE_25_A_35', 'DE_36_A_45', 'DE_46_A_60', 'PLUS_60']).optional(),
+  nom: z.string().trim().min(1, 'Le nom est obligatoire'),
+  prenoms: z.string().trim().min(1, 'Les prénoms sont obligatoires'),
+  identiteProprietaire: z.string().trim().optional(),
+  genre: z.enum(['MASCULIN', 'FEMININ']).optional(),
+  trancheAge: z.enum(['MOINS_30', 'DE_30_A_45', 'DE_45_A_60', 'PLUS_60']).optional(),
   situationMatrimoniale: z.enum(['CELIBATAIRE', 'MARIE', 'DIVORCE', 'VEUF']).optional(),
-  situationFamiliale: z.string().optional(),
-  nombreEnfantsCharge: z.number().int().min(0).optional(),
+  situationFamiliale: z.string().trim().optional(),
+  nombreEnfantsCharge: z.number().int().min(0).max(30).optional(),
   consentementDonne: z.boolean().refine((val) => val === true, {
     message: 'Le consentement du producteur (RGPD) est obligatoire pour enregistrer',
   }),
@@ -34,22 +52,24 @@ export const ProducteurFormSchema = z.object({
 
 export const ParcelleFormSchema = z.object({
   producteurId: z.string().min(1, 'Producteur requis'),
-  anneeParcelle: z.number().int().min(1900).max(2100).optional(),
-  superficie: z.number().positive('La superficie doit être > 0').optional(),
+  anneeParcelle: z.number().int().min(LIMITES.anneeParcelle.min).max(LIMITES.anneeParcelle.max).optional(),
+  superficie: borne(LIMITES.superficieHa).optional(),
   executantEntretien: z.enum(['PROPRIETAIRE', 'MANOEUVRE', 'AGENT_TERRAIN']).optional(),
-  typeEntretien: z.string().optional(),
-  frequenceEntretienAn: z.number().int().min(0).optional(),
-  frequenceEntretienType: z.string().optional(),
-  executantTaille: z.string().optional(),
-  frequenceTailleAn: z.number().int().min(0).optional(),
-  typeIntrants: z.string().optional(),
-  raisonNonUtilisationIntrants: z.string().optional(),
-  autresEntretiens: z.string().optional(),
-  maladiesObservees: z.string().optional(),
-  ancienneteMaladies: z.string().optional(),
-  maladiesNonListees: z.string().optional(),
-  productionEstimee: z.number().min(0).optional(),
-  uniteProduction: z.string().optional(),
+  typeEntretien: z.string().trim().optional(),
+  frequenceEntretienAn: z.number().int().min(0).max(52).optional(),
+  frequenceEntretienType: z
+    .enum(['HEBDOMADAIRE', 'MENSUEL', 'TRIMESTRIEL', 'SEMESTRIEL', 'ANNUEL', 'AUTRE'])
+    .optional(),
+  executantTaille: z.string().trim().optional(),
+  frequenceTailleAn: z.number().int().min(0).max(52).optional(),
+  typeIntrants: z.string().trim().optional(),
+  raisonNonUtilisationIntrants: z.string().trim().optional(),
+  autresEntretiens: z.string().trim().optional(),
+  maladiesObservees: z.string().trim().optional(),
+  ancienneteMaladies: z.string().trim().optional(),
+  maladiesNonListees: z.string().trim().optional(),
+  productionEstimee: borne(LIMITES.productionKgAn).optional(),
+  uniteProduction: z.enum(['KG_PAR_TRAITE', 'KG_PAR_AN']).optional(),
 });
 
 export const PlacetteFormSchema = z.object({
@@ -57,22 +77,57 @@ export const PlacetteFormSchema = z.object({
   numeroPlacette: z.string().min(1, 'N° Placette requis'),
   delegationRegionale: z.string().min(1, 'Délégation Régionale requise'),
   ville: z.string().optional(),
-  village: z.string().optional(),
-  zoneCadastrale: z.string().optional(),
-  typologiePreIdentifiee: z.string().optional(),
-  chefEquipe: z.string().optional(),
+  village: z.string().trim().optional(),
+  zoneCadastrale: z.string().trim().optional(),
+  typologiePreIdentifiee: z.string().trim().optional(),
+  chefEquipe: z.string().trim().optional(),
   dateInventaire: z.string().optional(),
   sommets: z.array(PointGPSSchema).length(4, 'Exactement 4 sommets GPS requis pour la placette'),
 });
 
-export const MesureArbreFormSchema = z.object({
-  typeSujet: z.enum(['CACAO', 'ARBRE_OMBRAGE']),
-  espece: z.string().optional(),
-  estMature: z.boolean().optional(),
-  circonference30cm: z.number().positive().optional(),
-  circonferenceDBH: z.number().positive().optional(),
-  hauteurFut: z.number().positive().optional(),
-  hauteurTotale: z.number().positive().optional(),
-  etatSanitaire: z.enum(['SAIN', 'MALADE', 'MORT']).default('SAIN'),
-  precisionEtat: z.string().optional(),
+export const SousPlacetteFormSchema = z.object({
+  numero: z.number().int().min(1).max(6),
+  nombrePlantsCacao: z.number().int().min(LIMITES.comptageSP.min).max(LIMITES.comptageSP.max).optional(),
+  nombreArbres: z.number().int().min(LIMITES.comptageSP.min).max(LIMITES.comptageSP.max).optional(),
 });
+
+export const MesureArbreFormSchema = z
+  .object({
+    typeSujet: z.enum(['CACAO', 'ARBRE_OMBRAGE']),
+    espece: z.string().trim().optional(),
+    especeId: z.string().optional(),
+    especeLibre: z.string().trim().optional(),
+    emetOmbre: z.boolean().optional(),
+    estMature: z.boolean().optional(),
+    circonference30cm: borne(LIMITES.circonference30cmCm).optional(),
+    circonferenceDBH: borne(LIMITES.circonferenceDBHM).optional(),
+    hauteurFut: borne(LIMITES.hauteurM).optional(),
+    hauteurTotale: borne(LIMITES.hauteurM).optional(),
+    etatSanitaire: z
+      .enum(['VIVANT', 'MALADE', 'MORT_SAIN', 'MORT_POURRI'])
+      .default('VIVANT'),
+    precisionEtat: z.string().trim().optional(),
+    maladieId: z.string().optional(),
+    maladieLibre: z.string().trim().optional(),
+    photoMaladie: z.string().optional(),
+  })
+  .refine((d) => d.typeSujet !== 'ARBRE_OMBRAGE' || !!(d.especeId || d.especeLibre || d.espece), {
+    message: "L'espèce est requise pour un arbre",
+    path: ['especeId'],
+  })
+  .refine((d) => !(d.circonference30cm !== undefined && d.circonferenceDBH !== undefined), {
+    message: 'Une seule mesure de grosseur : circonférence (cm) OU DBH (m)',
+    path: ['circonference30cm'],
+  })
+  .refine((d) => d.typeSujet !== 'ARBRE_OMBRAGE' || d.circonference30cm === undefined, {
+    message: "Pour un arbre d'ombrage, la grosseur se saisit en DBH (m)",
+    path: ['circonference30cm'],
+  })
+  .refine((d) => d.etatSanitaire !== 'MALADE' || !!(d.maladieId || d.maladieLibre), {
+    message: 'La maladie est requise quand le sujet est MALADE',
+    path: ['maladieId'],
+  })
+  .refine((d) => d.etatSanitaire !== 'MALADE' || !!d.photoMaladie, {
+    message: 'Une photo de diagnostic est requise pour un sujet MALADE',
+    path: ['photoMaladie'],
+  });
