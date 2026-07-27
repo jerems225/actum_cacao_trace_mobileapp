@@ -734,6 +734,25 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     fontStyle: 'italic',
     color: colors.textSecondary,
   },
+  // Pendant vert de `manquantsBox` : même gabarit, message inverse.
+  completeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    backgroundColor: colors.mintBadge,
+    borderWidth: 1,
+    borderColor: colors.mintSoft,
+    borderRadius: 12,
+    padding: scale(13),
+    marginBottom: scale(12),
+  },
+  completeTexte: {
+    flex: 1,
+    fontSize: scale(12.5),
+    lineHeight: scale(18),
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
   actionsFin: {
     gap: scale(10),
     marginTop: scale(4),

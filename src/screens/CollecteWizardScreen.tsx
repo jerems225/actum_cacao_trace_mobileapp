@@ -19,6 +19,7 @@ import { colors, useResponsive } from '../theme';
 import { createStyles } from './collecte/collecte.styles';
 import {
   CLE_AUTRE,
+  DERNIERE_ETAPE,
   DRAFT_VIDE,
   ETAPES,
   VOLET_VIDE,
@@ -570,7 +571,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   // vivent au moment d'enregistrer, pas au moment de changer d'écran.
   const handleNextStep = () => {
     setErrorMsg(null);
-    if (currentStep < 5) setCurrentStep((prev) => (prev + 1) as never);
+    if (currentStep < DERNIERE_ETAPE) setCurrentStep((prev) => (prev + 1) as never);
   };
 
   /**
@@ -1826,26 +1827,80 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           </View>
         )}
 
-        {/* Récapitulatif de ce qui manque, à la dernière étape. Informe sans
-            interdire : la navigation reste libre, seule la soumission attend
-            que la liste soit vide. */}
-        {currentStep === 5 && manquants.length > 0 && (
-          <View style={styles.manquantsBox}>
-            <View style={styles.manquantsHead}>
-              <Feather name="alert-triangle" size={15} color={colors.warning} />
-              <Text style={styles.manquantsTitre}>
-                {manquants.length} information{manquants.length > 1 ? 's' : ''} requise
-                {manquants.length > 1 ? 's' : ''} manquante{manquants.length > 1 ? 's' : ''}
+        {/* ÉTAPE 6 — Validation. Le récapitulatif de ce qui manque et les deux
+            actions d'enregistrement vivent ici, et non au pied du Bloc D : cette
+            page ne sert qu'à décider, sans avoir à défiler une longue saisie. */}
+        {currentStep === 6 && (
+          <View style={styles.stepCard}>
+            <Text style={styles.blocTitle}>Validation de la collecte</Text>
+            <Text style={styles.blocSub}>
+              {manquants.length === 0
+                ? 'La fiche est complète. Vous pouvez la soumettre.'
+                : 'Vérifiez ce qui manque, puis choisissez comment enregistrer.'}
+            </Text>
+
+            {manquants.length === 0 ? (
+              <View style={styles.completeBox}>
+                <Feather name="check-circle" size={18} color={colors.emeraldPrimary} />
+                <Text style={styles.completeTexte}>
+                  Toutes les informations requises sont renseignées.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.manquantsBox}>
+                <View style={styles.manquantsHead}>
+                  <Feather name="alert-triangle" size={15} color={colors.warning} />
+                  <Text style={styles.manquantsTitre}>
+                    {manquants.length} information{manquants.length > 1 ? 's' : ''} requise
+                    {manquants.length > 1 ? 's' : ''} manquante{manquants.length > 1 ? 's' : ''}
+                  </Text>
+                </View>
+                {manquants.map((m) => (
+                  <Text key={m} style={styles.manquantsLigne}>
+                    • {m}
+                  </Text>
+                ))}
+                <Text style={styles.manquantsAide}>
+                  Vous pouvez enregistrer en brouillon et compléter plus tard.
+                </Text>
+              </View>
+            )}
+
+            {/* Deux actions explicites : l'agent décide, rien n'est choisi à sa place. */}
+            <View style={styles.actionsFin}>
+              <TouchableOpacity
+                style={[styles.draftBtn, saving && styles.saveBtnDisabled]}
+                onPress={() => handleSave(StatutCollecte.BROUILLON)}
+                disabled={saving}
+              >
+                <Feather name="save" size={17} color={colors.textPrimary} />
+                <Text style={styles.draftBtnText}>
+                  {saving ? 'Enregistrement…' : 'Enregistrer en brouillon'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.saveBtn,
+                  (saving || manquants.length > 0) && styles.saveBtnDisabled,
+                ]}
+                onPress={() => handleSave(StatutCollecte.SOUMISE)}
+                disabled={saving}
+              >
+                <Feather name="check" size={18} color={colors.textLight} />
+                <Text style={styles.saveBtnText}>
+                  {saving
+                    ? 'Enregistrement…'
+                    : modeEdition
+                      ? 'Compléter et soumettre'
+                      : 'Soumettre la collecte'}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.actionsFinAide}>
+                Un brouillon reste sur votre appareil. Une collecte soumise part au
+                serveur et n'est plus modifiable depuis le mobile.
               </Text>
             </View>
-            {manquants.map((m) => (
-              <Text key={m} style={styles.manquantsLigne}>
-                • {m}
-              </Text>
-            ))}
-            <Text style={styles.manquantsAide}>
-              Vous pouvez enregistrer en brouillon et compléter plus tard.
-            </Text>
           </View>
         )}
 
@@ -1861,51 +1916,15 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             </TouchableOpacity>
           )}
 
-          {currentStep < 5 && (
+          {currentStep < DERNIERE_ETAPE && (
             <TouchableOpacity style={styles.nextBtn} onPress={handleNextStep}>
-              <Text style={styles.nextBtnText}>Étape Suivante</Text>
+              <Text style={styles.nextBtnText}>
+                {currentStep === DERNIERE_ETAPE - 1 ? 'Valider la collecte' : 'Étape suivante'}
+              </Text>
               <Feather name="arrow-right" size={18} color={colors.textLight} />
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Deux actions explicites à la fin de la saisie : l'agent décide, rien
-            n'est choisi à sa place. */}
-        {currentStep === 5 && (
-          <View style={styles.actionsFin}>
-            <TouchableOpacity
-              style={[styles.draftBtn, saving && styles.saveBtnDisabled]}
-              onPress={() => handleSave(StatutCollecte.BROUILLON)}
-              disabled={saving}
-            >
-              <Feather name="save" size={17} color={colors.textPrimary} />
-              <Text style={styles.draftBtnText}>
-                {saving ? 'Enregistrement…' : 'Enregistrer en brouillon'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.saveBtn,
-                (saving || manquants.length > 0) && styles.saveBtnDisabled,
-              ]}
-              onPress={() => handleSave(StatutCollecte.SOUMISE)}
-              disabled={saving}
-            >
-              <Feather name="check" size={18} color={colors.textLight} />
-              <Text style={styles.saveBtnText}>
-                {saving
-                  ? 'Enregistrement…'
-                  : modeEdition
-                    ? 'Compléter et soumettre'
-                    : 'Soumettre la collecte'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.actionsFinAide}>
-              Une collecte soumise n'est plus modifiable depuis le mobile.
-            </Text>
-          </View>
-        )}
 
         <View style={{ height: 120 }} />
       </ScrollView>

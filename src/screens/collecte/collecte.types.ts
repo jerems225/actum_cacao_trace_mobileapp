@@ -99,8 +99,12 @@ export interface MesureCollectee {
   photoMaladie?: string;
 }
 
-/** Les cinq étapes du parcours de saisie. */
-export type EtapeCollecte = 1 | 2 | 3 | 4 | 5;
+/**
+ * Étapes du parcours de saisie.
+ * La 6e est une page de validation : le récapitulatif de ce qui manque et les
+ * deux actions d'enregistrement y vivent, plutôt qu'au pied du Bloc D déjà long.
+ */
+export type EtapeCollecte = 1 | 2 | 3 | 4 | 5 | 6;
 
 export const ETAPES: { step: EtapeCollecte; label: string }[] = [
   { step: 1, label: 'A. Prod.' },
@@ -108,4 +112,9 @@ export const ETAPES: { step: EtapeCollecte; label: string }[] = [
   { step: 3, label: 'C. Infos' },
   { step: 4, label: 'C. GPS' },
   { step: 5, label: 'D. Mes.' },
+  // Libellé court : six puces se partagent la largeur, « Validation » passait à la ligne.
+  { step: 6, label: 'Valider' },
 ];
+
+/** Dernière étape du parcours — sert de borne à la navigation. */
+export const DERNIERE_ETAPE: EtapeCollecte = 6;
