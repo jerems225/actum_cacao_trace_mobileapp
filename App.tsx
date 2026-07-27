@@ -13,6 +13,9 @@ import { CarteScreen } from './src/screens/CarteScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { offlineStorage } from './src/services/storage';
+import { delegationsService } from './src/services/delegations';
+import { settingsService } from './src/services/settings';
+import { referentielsService } from './src/services/referentiels';
 import { authService, UserProfile } from './src/services/auth';
 import { notificationService, AppNotification } from './src/services/notification';
 import { colors } from './src/theme';
@@ -59,6 +62,12 @@ export default function App() {
     setCurrentUser(u);
     const queue = await offlineStorage.getSyncQueue();
     setPendingSyncCount(queue.length);
+
+    // Met en cache le référentiel délégations/villes + les réglages (flags admin)
+    // pour un fonctionnement cohérent hors-ligne.
+    void delegationsService.refresh();
+    void settingsService.refresh();
+    void referentielsService.refresh();
 
     await notificationService.initPermissions();
     const notifs = await notificationService.getNotifications();

@@ -12,7 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#FAF7F0"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ci.actumdev.cacaotrace"
@@ -32,6 +34,11 @@
       "expo-font",
       "expo-sqlite",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "27dd5fa3-dde3-42ff-9f2f-24cdbb176dae"
+      }
+    }
   }
 }
