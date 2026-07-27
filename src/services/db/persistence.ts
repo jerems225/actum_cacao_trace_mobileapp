@@ -53,4 +53,11 @@ export const StorageKeys = {
   // Empreinte d'authentification (code agent + hash du code secret) pour la
   // vérification hors-ligne. Stockée en secure-store sur natif.
   AUTH_GUARD: 'auth_guard',
+  // Référentiel délégations/villes mis en cache pour l'usage hors-ligne.
+  DELEGATIONS: 'delegations',
+  // Réglages applicatifs (flags pilotés par l'admin) mis en cache.
+  SETTINGS: 'app_settings',
+  // Référentiels mesures (espèces / maladies) mis en cache pour l'offline.
+  ESPECES: 'especes',
+  MALADIES: 'maladies',
 } as const;

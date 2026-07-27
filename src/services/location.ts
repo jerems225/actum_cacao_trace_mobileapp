@@ -8,6 +8,7 @@
 
 import * as Location from 'expo-location';
 import { ALLOW_GPS_SIMULATION, GPS_MIN_ACCURACY_METERS } from './config';
+import { TypePoint } from '../types';
 import type { PointGPS } from '../types';
 
 export class LocationError extends Error {
@@ -33,11 +34,14 @@ export class LocationService {
    * Capture un point GPS réel. Lève `LocationError` si le capteur est
    * indisponible et que la simulation n'est pas autorisée.
    */
-  static async getCurrentPosition(ordreSommet: number): Promise<PointGPS> {
+  static async getCurrentPosition(
+    typePoint: TypePoint,
+    ordreSommet: number,
+  ): Promise<PointGPS> {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        return this.fallbackOrThrow(ordreSommet, 'Permission de localisation refusée.');
+        return this.fallbackOrThrow(typePoint, ordreSommet, 'Permission de localisation refusée.');
       }
 
       const location = await Location.getCurrentPositionAsync({
@@ -48,12 +52,14 @@ export class LocationService {
 
       if (!this.isWithinIvoryCoast(lat, lon)) {
         return this.fallbackOrThrow(
+          typePoint,
           ordreSommet,
           'Position hors des bornes de la Côte d\'Ivoire.',
         );
       }
 
       return {
+        typePoint,
         ordreSommet,
         latitude: Number(lat.toFixed(6)),
         longitude: Number(lon.toFixed(6)),
@@ -62,19 +68,23 @@ export class LocationService {
       };
     } catch (e) {
       if (e instanceof LocationError) throw e;
-      return this.fallbackOrThrow(ordreSommet, 'Capteur GPS indisponible.');
+      return this.fallbackOrThrow(typePoint, ordreSommet, 'Capteur GPS indisponible.');
     }
   }
 
-  private static fallbackOrThrow(ordreSommet: number, reason: string): PointGPS {
+  private static fallbackOrThrow(
+    typePoint: TypePoint,
+    ordreSommet: number,
+    reason: string,
+  ): PointGPS {
     if (!ALLOW_GPS_SIMULATION) {
       throw new LocationError(`${reason} Capture GPS réelle requise (mode production).`);
     }
-    return this.getSimulatedPoint(ordreSommet);
+    return this.getSimulatedPoint(typePoint, ordreSommet);
   }
 
   /** Point de démonstration (région San-Pédro / Soubré) — usage développement uniquement. */
-  private static getSimulatedPoint(ordreSommet: number): PointGPS {
+  private static getSimulatedPoint(typePoint: TypePoint, ordreSommet: number): PointGPS {
     const baseLat = 5.6412;
     const baseLon = -6.6031;
     const offsets: Record<number, [number, number]> = {
@@ -83,11 +93,19 @@ export class LocationService {
       3: [0.00042, 0.00055],
       4: [0.00005, 0.00048],
     };
-    const [dLat, dLon] = offsets[ordreSommet] || [0, 0];
+    // Léger décalage par catégorie pour éviter des points superposés en démo.
+    const catShift =
+      typePoint === TypePoint.MILIEU_INTERMEDIAIRE
+        ? 0.0002
+        : typePoint === TypePoint.MILIEU_CENTRAL
+          ? 0.0001
+          : 0;
+    const [dLat, dLon] = offsets[ordreSommet] || [0.0003 * ordreSommet, 0.0003 * ordreSommet];
     return {
+      typePoint,
       ordreSommet,
-      latitude: Number((baseLat + dLat).toFixed(6)),
-      longitude: Number((baseLon + dLon).toFixed(6)),
+      latitude: Number((baseLat + dLat + catShift).toFixed(6)),
+      longitude: Number((baseLon + dLon + catShift).toFixed(6)),
       altitude: 125.0,
       precision: 2.8,
     };

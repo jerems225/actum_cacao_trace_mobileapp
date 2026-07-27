@@ -8,6 +8,12 @@
 
 import { apiRequest } from './http';
 import type { UserProfile } from './auth';
+import type { Delegation, Espece, Maladie } from '../types';
+
+/** Réglages applicatifs pilotés par l'admin (flags). */
+export interface AppSettings {
+  agentManualPointEdit: boolean;
+}
 
 // --- Contrats de synchronisation (alignés backend/sync) ---
 export interface SyncPushRecord {
@@ -29,6 +35,8 @@ export interface SyncPushResult {
   status: 'SYNCED' | 'CONFLICT';
   serverId?: string;
   reason?: string;
+  /** Champs autoritatifs renvoyés par le serveur (ex. numeroPlacette final). */
+  fields?: Record<string, unknown>;
 }
 
 export interface SyncPullResponse {
@@ -117,6 +125,24 @@ export const apiClient = {
       method: 'PATCH',
       body: updates,
     });
+  },
+
+  // --- Référentiel géographique ---
+  getDelegations(): Promise<Delegation[]> {
+    return apiRequest<Delegation[]>('/delegations');
+  },
+
+  // --- Réglages applicatifs (flags admin) ---
+  getSettings(): Promise<AppSettings> {
+    return apiRequest<AppSettings>('/settings');
+  },
+
+  // --- Référentiels mesures (espèces / maladies) ---
+  getEspeces(): Promise<Espece[]> {
+    return apiRequest<Espece[]>('/especes');
+  },
+  getMaladies(): Promise<Maladie[]> {
+    return apiRequest<Maladie[]>('/maladies');
   },
 
   // --- Synchronisation ---

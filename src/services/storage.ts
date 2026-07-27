@@ -126,6 +126,13 @@ class OfflineStorageService {
     return placette;
   }
 
+  /** Applique le numéro de placette définitif renvoyé par le serveur (post-synchro). */
+  async setPlacetteNumero(localId: string, numero: string): Promise<void> {
+    const placette = await placetteRepository.findById(localId);
+    if (!placette || placette.numeroPlacette === numero) return;
+    await placetteRepository.save({ ...placette, numeroPlacette: numero, updatedAt: nowIso() });
+  }
+
   /**
    * Enregistre une collecte complète (Blocs A→D) en une opération cohérente :
    * producteur, parcelle, placette + sous-placettes + mesures. Chaque entité
@@ -230,14 +237,14 @@ class OfflineStorageService {
     // Production estimée cumulée (kg/an) — indicateur clé du suivi de production.
     const productionTotale = parcelles.reduce((sum, p) => sum + (p.productionEstimee || 0), 0);
 
-    // État sanitaire des plants : % de sujets mesurés en bon état (SAIN).
+    // État sanitaire des plants : % de sujets mesurés vivants (en bon état).
     let totalMesures = 0;
     let mesuresSaines = 0;
     for (const plc of placettes) {
       for (const sp of plc.sousPlacettes) {
         for (const mesure of sp.mesures) {
           totalMesures += 1;
-          if (mesure.etatSanitaire === EtatSanitaire.SAIN) mesuresSaines += 1;
+          if (mesure.etatSanitaire === EtatSanitaire.VIVANT) mesuresSaines += 1;
         }
       }
     }
@@ -284,6 +291,8 @@ class OfflineStorageService {
       parcelleId: placette.parcelleId,
       numeroPlacette: placette.numeroPlacette,
       delegationRegionale: placette.delegationRegionale,
+      delegationId: placette.delegationId,
+      villeId: placette.villeId,
       ville: placette.ville,
       village: placette.village,
       zoneCadastrale: placette.zoneCadastrale,
@@ -297,6 +306,8 @@ class OfflineStorageService {
       await this.enqueue('SousPlacette', 'CREATE', sp.id, {
         placetteId: sp.placetteId,
         numero: sp.numero,
+        nombrePlantsCacao: sp.nombrePlantsCacao,
+        nombreArbres: sp.nombreArbres,
         sommets: sp.sommets,
       });
       for (const mesure of sp.mesures) {
@@ -304,6 +315,9 @@ class OfflineStorageService {
           sousPlacetteId: mesure.sousPlacetteId,
           typeSujet: mesure.typeSujet,
           espece: mesure.espece,
+          especeId: mesure.especeId,
+          especeLibre: mesure.especeLibre,
+          emetOmbre: mesure.emetOmbre,
           estMature: mesure.estMature,
           circonference30cm: mesure.circonference30cm,
           circonferenceDBH: mesure.circonferenceDBH,
@@ -311,6 +325,9 @@ class OfflineStorageService {
           hauteurTotale: mesure.hauteurTotale,
           etatSanitaire: mesure.etatSanitaire,
           precisionEtat: mesure.precisionEtat,
+          maladieId: mesure.maladieId,
+          maladieLibre: mesure.maladieLibre,
+          photoMaladie: mesure.photoMaladie,
         });
       }
     }
@@ -320,6 +337,7 @@ class OfflineStorageService {
     return {
       nom: p.nom,
       prenoms: p.prenoms,
+      genre: p.genre,
       identiteProprietaire: p.identiteProprietaire,
       trancheAge: p.trancheAge,
       situationMatrimoniale: p.situationMatrimoniale,
@@ -330,19 +348,35 @@ class OfflineStorageService {
     };
   }
 
+  /**
+   * Payload de synchronisation d'une parcelle.
+   * ⚠️ Liste blanche : un champ absent d'ici n'atteint JAMAIS le backend, même
+   * s'il est bien saisi et persisté localement. Tout nouveau champ de parcelle
+   * doit être ajouté ici en même temps que dans `ParcelleLocal`.
+   */
   private parcellePayload(p: ParcelleLocal): Record<string, unknown> {
     return {
       producteurId: p.producteurId,
       anneeParcelle: p.anneeParcelle,
       superficie: p.superficie,
+      // Bloc B4 — pratiques culturales
+      pratiquesRetenues: p.pratiquesRetenues,
+      aucunePratiquePrecision: p.aucunePratiquePrecision,
+      autresPratiquesPrecision: p.autresPratiquesPrecision,
+      pratiques: p.pratiques,
+      // État sanitaire de la parcelle
+      maladiesObservees: p.maladiesObservees,
+      ancienneteMaladies: p.ancienneteMaladies,
+      maladiesNonListees: p.maladiesNonListees,
+      // Production
+      productionEstimee: p.productionEstimee,
+      uniteProduction: p.uniteProduction,
+      // Champs de pratiques dépréciés : transmis seulement s'ils existent encore
+      // sur une collecte enregistrée avant la refonte du B4.
       executantEntretien: p.executantEntretien,
       typeEntretien: p.typeEntretien,
       frequenceEntretienAn: p.frequenceEntretienAn,
       frequenceEntretienType: p.frequenceEntretienType,
-      maladiesObservees: p.maladiesObservees,
-      ancienneteMaladies: p.ancienneteMaladies,
-      productionEstimee: p.productionEstimee,
-      uniteProduction: p.uniteProduction,
     };
   }
 }

@@ -114,6 +114,10 @@ class SyncManager {
           if (res.serverId) idMap.set(record.clientId, res.serverId);
           pendingLocalIds.delete(record.clientId);
           await offlineStorage.markSynced(record.entity as SyncEntity, record.clientId, res.serverId);
+          // Numéro de placette autoritatif renvoyé par le serveur → remplace l'aperçu.
+          if (record.entity === 'Placette' && typeof res.fields?.numeroPlacette === 'string') {
+            await offlineStorage.setPlacetteNumero(record.clientId, res.fields.numeroPlacette);
+          }
           await syncQueueRepository.remove(record.id);
           totalSynced += 1;
         } else {
