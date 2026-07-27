@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,11 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Header } from '../components/common/Header';
-import { SelectField } from '../components/common/SelectField';
+import { SelectField, type SelectOption } from '../components/common/SelectField';
 import { PlacettePointsCapture } from '../components/GPS/PlacettePointsCapture';
 import type { ManualPointValues } from '../components/GPS/PlacettePointsCapture';
 import { colors, useResponsive } from '../theme';
+import type { Responsive } from '../theme/responsive';
 import { LocationService, LocationError } from '../services/location';
 import { offlineStorage } from '../services/storage';
 import { delegationsService } from '../services/delegations';
@@ -109,14 +110,23 @@ interface MesureDraft {
   circoMode: 'CM' | 'DBH';
   circoValue: string;
   hauteur: string;
+  /** Cacaoyers uniquement : un arbre d'ombrage n'a pas d'état sanitaire relevé. */
   etatSanitaire: EtatSanitaire;
-  especeId: string | null;
+  /** Clé de l'espèce retenue (`id:<uuid>` ou `CLE_AUTRE`). */
+  especeKey: string | null;
   especeAutre: string;
-  /** Clé de l'option de maladie retenue (`id:<uuid>` ou `nom:<libellé>`). */
+  /** Clé de la maladie retenue (`id:<uuid>`, `nom:<libellé>` ou `CLE_AUTRE`). */
   maladieKey: string | null;
   maladieAutre: string;
   photoMaladie: string | null;
 }
+
+/**
+ * Clé de l'option « Autres » des listes déroulantes de référentiel.
+ * Placée en dernière position, elle révèle le champ de saisie libre — plutôt
+ * qu'un champ toujours visible qui laissait croire à deux réponses possibles.
+ */
+const CLE_AUTRE = 'AUTRE';
 
 const DRAFT_VIDE: MesureDraft = {
   typeSujet: TypeSujet.CACAO,
@@ -124,7 +134,7 @@ const DRAFT_VIDE: MesureDraft = {
   circoValue: '',
   hauteur: '',
   etatSanitaire: EtatSanitaire.VIVANT,
-  especeId: null,
+  especeKey: null,
   especeAutre: '',
   maladieKey: null,
   maladieAutre: '',
@@ -155,7 +165,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   unreadCount,
   user,
 }) => {
-  const { paddingHorizontal, contentStyle } = useResponsive();
+  const responsive = useResponsive();
+  const { paddingHorizontal, contentStyle } = responsive;
+  // Recalculé uniquement quand les dimensions changent (rotation, tablette).
+  const styles = useMemo(() => createStyles(responsive), [responsive]);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -329,9 +342,23 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
    * terrain. Une option sans `id` partira en `maladieLibre` (le backend la
    * rapproche par nom).
    */
-  const maladieOptions: { key: string; id?: string; nom: string }[] = maladiesList.length
-    ? maladiesList.map((m) => ({ key: `id:${m.id}`, id: m.id, nom: m.nom }))
-    : MALADIES_PAR_DEFAUT.map((nom) => ({ key: `nom:${nom}`, nom }));
+  const maladieOptions: SelectOption[] = [
+    ...(maladiesList.length
+      ? maladiesList.map((m) => ({ key: `id:${m.id}`, label: m.nom }))
+      : MALADIES_PAR_DEFAUT.map((nom) => ({ key: `nom:${nom}`, label: nom }))),
+    // « Autres » toujours en dernier : on parcourt d'abord le référentiel.
+    { key: CLE_AUTRE, label: 'Autres (à préciser)' },
+  ];
+
+  /** Espèces d'arbre proposées, même principe : référentiel puis « Autres ». */
+  const especeOptions: SelectOption[] = [
+    ...especes.map((e) => ({
+      key: `id:${e.id}`,
+      label: e.nom,
+      hint: e.emetOmbre ? undefined : "n'émet pas d'ombre",
+    })),
+    { key: CLE_AUTRE, label: 'Autres (à préciser)' },
+  ];
 
   const parseNum = parseNombre;
 
@@ -399,17 +426,22 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     let especeLibreVal: string | undefined;
     let emetOmbreVal: boolean | undefined;
     if (!isCacao) {
-      if (draft.especeId) {
-        const e = especes.find((x) => x.id === draft.especeId);
-        especeIdVal = draft.especeId;
+      if (draft.especeKey === CLE_AUTRE) {
+        if (!draft.especeAutre.trim()) {
+          toast.error("Précisez le nom de l'espèce.");
+          return;
+        }
+        especeLibreVal = draft.especeAutre.trim();
+        especeNom = especeLibreVal;
+        emetOmbreVal = false; // espèce hors-liste = non émettrice d'ombre
+      } else if (draft.especeKey?.startsWith('id:')) {
+        const id = draft.especeKey.slice(3);
+        const e = especes.find((x) => x.id === id);
+        especeIdVal = id;
         especeNom = e?.nom;
         emetOmbreVal = e?.emetOmbre;
-      } else if (draft.especeAutre.trim()) {
-        especeLibreVal = draft.especeAutre.trim();
-        especeNom = draft.especeAutre.trim();
-        emetOmbreVal = false; // espèce hors-liste = non émettrice d'ombre
       } else {
-        toast.error("Sélectionnez l'espèce de l'arbre (ou saisissez-la).");
+        toast.error("Sélectionnez l'espèce de l'arbre.");
         return;
       }
     }
@@ -430,21 +462,32 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       return;
     }
 
-    // État MALADE : maladie (liste ou « autre ») + photo obligatoires.
+    // L'état sanitaire ne concerne que les cacaoyers : un arbre d'ombrage part
+    // toujours en VIVANT, sans maladie ni photo.
+    const etatRetenu = isCacao ? draft.etatSanitaire : EtatSanitaire.VIVANT;
+
+    // État MALADE : maladie (liste ou « Autres ») + photo obligatoires.
     let maladieIdVal: string | undefined;
     let maladieLibreVal: string | undefined;
-    if (draft.etatSanitaire === EtatSanitaire.MALADE) {
-      const option = maladieOptions.find((o) => o.key === draft.maladieKey);
-      if (option?.id) maladieIdVal = option.id;
-      // Option issue du repli hors-ligne (pas d'id) → transmise par son nom.
-      else if (option) maladieLibreVal = option.nom;
-      else if (draft.maladieAutre.trim()) maladieLibreVal = draft.maladieAutre.trim();
-      else {
-        toast.error('Précisez la maladie.');
+    if (etatRetenu === EtatSanitaire.MALADE) {
+      if (draft.maladieKey === CLE_AUTRE) {
+        if (!draft.maladieAutre.trim()) {
+          toast.error('Précisez le nom de la maladie.');
+          return;
+        }
+        maladieLibreVal = draft.maladieAutre.trim();
+      } else if (draft.maladieKey?.startsWith('id:')) {
+        maladieIdVal = draft.maladieKey.slice(3);
+      } else if (draft.maladieKey?.startsWith('nom:')) {
+        // Option du repli hors-ligne : pas d'id local, transmise par son nom et
+        // rapprochée par le backend.
+        maladieLibreVal = draft.maladieKey.slice(4);
+      } else {
+        toast.error('Sélectionnez la maladie.');
         return;
       }
       if (!draft.photoMaladie) {
-        toast.error('Une photo de diagnostic est obligatoire pour un sujet malade.');
+        toast.error('Une photo de diagnostic est obligatoire pour un cacaoyer malade.');
         return;
       }
     }
@@ -461,11 +504,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         circonference30cm: circoMode === 'CM' ? parseNum(draft.circoValue) : undefined,
         circonferenceDBH: circoMode === 'DBH' ? parseNum(draft.circoValue) : undefined,
         hauteurTotale: parseNum(draft.hauteur),
-        etatSanitaire: draft.etatSanitaire,
+        etatSanitaire: etatRetenu,
         maladieId: maladieIdVal,
         maladieLibre: maladieLibreVal,
         photoMaladie:
-          draft.etatSanitaire === EtatSanitaire.MALADE ? draft.photoMaladie ?? undefined : undefined,
+          etatRetenu === EtatSanitaire.MALADE ? draft.photoMaladie ?? undefined : undefined,
       },
     ]);
     // Vide le brouillon de CETTE sous-placette pour la mesure suivante, en
@@ -1387,10 +1430,17 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             <View style={styles.typeSelector}>
               <TouchableOpacity
                 style={[styles.typeBtn, isCacao && styles.typeBtnActive]}
-                // Le changement de type vide la grosseur : passer de cm (cacao) à
-                // DBH en m (arbre) sans effacer laisserait une valeur dans la
-                // mauvaise unité.
-                onPress={() => patchDraft({ typeSujet: TypeSujet.CACAO, circoValue: '' })}
+                // Le changement de type vide ce qui ne s'applique plus : la
+                // grosseur (cm ↔ DBH en m, unités différentes) et l'espèce, qui
+                // ne concerne que les arbres.
+                onPress={() =>
+                  patchDraft({
+                    typeSujet: TypeSujet.CACAO,
+                    circoValue: '',
+                    especeKey: null,
+                    especeAutre: '',
+                  })
+                }
               >
                 <Feather name="box" size={14} color={isCacao ? '#FFF' : colors.textPrimary} />
                 <Text style={[styles.typeBtnText, isCacao && styles.typeBtnTextActive]}>
@@ -1400,7 +1450,19 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
               <TouchableOpacity
                 style={[styles.typeBtn, !isCacao && styles.typeBtnActive]}
-                onPress={() => patchDraft({ typeSujet: TypeSujet.ARBRE_OMBRAGE, circoValue: '' })}
+                // Vers un arbre : l'état sanitaire ne s'applique plus, on remet
+                // VIVANT et on efface maladie et photo pour ne rien transmettre
+                // d'un diagnostic saisi sur un cacaoyer.
+                onPress={() =>
+                  patchDraft({
+                    typeSujet: TypeSujet.ARBRE_OMBRAGE,
+                    circoValue: '',
+                    etatSanitaire: EtatSanitaire.VIVANT,
+                    maladieKey: null,
+                    maladieAutre: '',
+                    photoMaladie: null,
+                  })
+                }
               >
                 <Feather name="sun" size={14} color={!isCacao ? '#FFF' : colors.textPrimary} />
                 <Text style={[styles.typeBtnText, !isCacao && styles.typeBtnTextActive]}>
@@ -1409,43 +1471,34 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Espèce (arbres uniquement) : liste référentiel + « autre » */}
+            {/* Espèce — arbres d'ombrage uniquement. Liste déroulante, « Autres »
+                en dernière position, et champ de saisie révélé seulement si
+                l'agent choisit cette option. */}
             {!isCacao && (
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Espèce de l'arbre *</Text>
-                <View style={styles.chipsWrap}>
-                  {especes.map((e) => {
-                    const active = draft.especeId === e.id;
-                    return (
-                      <TouchableOpacity
-                        key={e.id}
-                        style={[styles.chip, active && styles.chipActive]}
-                        onPress={() =>
-                          patchDraft({ especeId: active ? null : e.id, especeAutre: '' })
-                        }
-                        activeOpacity={0.8}
-                      >
-                        {active && (
-                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
-                        )}
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                          {e.nom}
-                          {!e.emetOmbre ? ' • sans ombre' : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={[styles.optionalTag, { marginTop: 8 }]}>
-                  Autre espèce (hors liste, non émettrice d'ombre)
-                </Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Saisir une espèce absente de la liste"
-                  placeholderTextColor={colors.textMuted}
-                  value={draft.especeAutre}
-                  onChangeText={(t) => patchDraft({ especeAutre: t, especeId: t ? null : draft.especeId })}
+                <SelectField
+                  title="Espèce de l'arbre"
+                  placeholder="Choisir dans la liste…"
+                  value={draft.especeKey}
+                  options={especeOptions}
+                  onChange={(key) => patchDraft({ especeKey: key, especeAutre: '' })}
                 />
+                {draft.especeKey === CLE_AUTRE && (
+                  <>
+                    <Text style={styles.optionalTag}>
+                      Espèce hors liste — enregistrée comme non émettrice d'ombre, puis
+                      proposée à tous après validation par l'administration.
+                    </Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Nom de l'espèce"
+                      placeholderTextColor={colors.textMuted}
+                      value={draft.especeAutre}
+                      onChangeText={(t) => patchDraft({ especeAutre: t })}
+                    />
+                  </>
+                )}
               </View>
             )}
 
@@ -1505,57 +1558,63 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               />
             </View>
 
-            {/* État de santé */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>État de santé</Text>
-              <View style={styles.chipsWrap}>
-                {Object.values(EtatSanitaire).map((et) => {
-                  const active = draft.etatSanitaire === et;
-                  return (
-                    <TouchableOpacity
-                      key={et}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => patchDraft({ etatSanitaire: et })}
-                      activeOpacity={0.8}
-                    >
-                      {active && (
-                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
-                      )}
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                        {ETAT_SANITAIRE_LABELS[et]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+            {/* État de santé — CACAOYERS uniquement. Le diagnostic sanitaire
+                porte sur la production de cacao ; un arbre d'ombrage est relevé
+                pour son espèce et sa grosseur, pas pour son état. */}
+            {isCacao && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>État de santé</Text>
+                <View style={styles.chipsWrap}>
+                  {Object.values(EtatSanitaire).map((et) => {
+                    const active = draft.etatSanitaire === et;
+                    return (
+                      <TouchableOpacity
+                        key={et}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => patchDraft({ etatSanitaire: et })}
+                        activeOpacity={0.8}
+                      >
+                        {active && (
+                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        )}
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {ETAT_SANITAIRE_LABELS[et]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-            </View>
+            )}
 
-            {/* MALADE : maladie (liste + autre) + photo obligatoire */}
-            {draft.etatSanitaire === EtatSanitaire.MALADE && (
+            {/* MALADE : maladie (liste déroulante) + photo obligatoire */}
+            {isCacao && draft.etatSanitaire === EtatSanitaire.MALADE && (
               <View style={styles.maladieBox}>
                 <Text style={styles.inputLabel}>Maladie *</Text>
-                {/* Liste déroulante : le référentiel s'enrichit au fil des
-                    validations, des chips finiraient par occuper tout l'écran. */}
+                {/* Liste déroulante, « Autres » en dernière position : le champ
+                    de saisie n'apparaît que si l'agent retient cette option. */}
                 <SelectField
                   title="Maladie observée"
                   placeholder="Choisir dans la liste…"
                   value={draft.maladieKey}
-                  options={maladieOptions.map((o) => ({ key: o.key, label: o.nom }))}
+                  options={maladieOptions}
                   onChange={(key) => patchDraft({ maladieKey: key, maladieAutre: '' })}
                 />
-                <Text style={[styles.optionalTag, { marginTop: 10 }]}>
-                  Maladie absente de la liste ? Saisissez-la : elle sera proposée à tous les agents
-                  après validation par l'administration.
-                </Text>
-                <TextInput
-                  style={[styles.textInput, { marginTop: 6 }]}
-                  placeholder="Autre maladie (préciser)"
-                  placeholderTextColor={colors.textMuted}
-                  value={draft.maladieAutre}
-                  onChangeText={(t) =>
-                    patchDraft({ maladieAutre: t, maladieKey: t ? null : draft.maladieKey })
-                  }
-                />
+                {draft.maladieKey === CLE_AUTRE && (
+                  <>
+                    <Text style={styles.optionalTag}>
+                      Maladie hors liste — proposée à tous les agents après validation par
+                      l'administration.
+                    </Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Nom de la maladie"
+                      placeholderTextColor={colors.textMuted}
+                      value={draft.maladieAutre}
+                      onChangeText={(t) => patchDraft({ maladieAutre: t })}
+                    />
+                  </>
+                )}
 
                 <Text style={[styles.inputLabel, { marginTop: 12 }]}>Photo de diagnostic *</Text>
                 {draft.photoMaladie ? (
@@ -1681,7 +1740,28 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+// ============================================================================
+// Styles — fabrique dépendante du responsive
+// ----------------------------------------------------------------------------
+// Fabrique et non feuille figée : tailles de texte, marges et rayons suivent la
+// classe d'appareil via `scale()` (voir theme/responsive.ts). Une feuille statique
+// donnait un texte tassé sur petit téléphone et perdu sur tablette. Recalculée
+// seulement à la rotation ou au redimensionnement, grâce au useMemo du composant.
+//
+// Règle anti-débordement : tout conteneur en ligne reçoit `minWidth: 0`, et tout
+// texte potentiellement long reçoit `flex: 1` + `flexShrink: 1`. Sans cela, un
+// libellé comme « Désherbage chimique (produit phytosanitaire) » pousse sa puce
+// hors de la carte au lieu de passer à la ligne.
+// ============================================================================
+
+const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
+  // Respiration intérieure des cartes : serrée sur petit écran, généreuse sur
+  // tablette où la largeur ne manque pas.
+  const cardPadding = isTablet ? 24 : isSmallPhone ? 15 : 18;
+  // Espace au-dessus d'un titre de section : sépare franchement deux sujets.
+  const avantTitre = scale(isSmallPhone ? 16 : 20);
+
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundLight,
@@ -1710,7 +1790,7 @@ const styles = StyleSheet.create({
     borderColor: colors.emeraldPrimary,
   },
   stepText: {
-    fontSize: 10.5,
+    fontSize: scale(10.5),
     fontWeight: '600',
     color: colors.textSecondary,
     textAlign: 'center',
@@ -1731,50 +1811,61 @@ const styles = StyleSheet.create({
   },
   stepCard: {
     backgroundColor: colors.backgroundCard,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
+    borderRadius: isTablet ? 24 : 20,
+    padding: cardPadding,
+    marginBottom: scale(18),
     borderWidth: 1,
     borderColor: colors.borderLight,
+    // Garde-fou : la carte ne dépasse jamais la largeur disponible, quel que
+    // soit le contenu qu'on y place ensuite.
+    overflow: 'hidden',
   },
+  // Titre de bloc : `lineHeight` explicite pour que les majuscules accentuées
+  // (É, À) ne soient pas rognées, et respiration nette avant le sous-titre.
   blocTitle: {
-    fontSize: 16,
+    fontSize: scale(16),
+    lineHeight: scale(22),
     fontWeight: '800',
     color: colors.forestDark,
   },
   blocSub: {
-    fontSize: 12,
+    fontSize: scale(12),
+    lineHeight: scale(17),
     color: colors.textSecondary,
-    marginBottom: 16,
-    marginTop: 2,
+    marginTop: scale(3),
+    marginBottom: scale(18),
   },
   inputGroup: {
-    marginBottom: 14,
-    gap: 6,
+    marginBottom: scale(14),
+    gap: scale(6),
+    // Un groupe de champ ne doit jamais élargir son parent.
+    minWidth: 0,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: scale(12),
+    lineHeight: scale(17),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   optionalTag: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '500',
     color: colors.textMuted,
   },
   divider: {
     height: 1,
     backgroundColor: colors.borderLight,
-    marginTop: 6,
-    marginBottom: 14,
+    marginTop: scale(10),
+    marginBottom: scale(16),
   },
   sectionMini: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '800',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: colors.textSecondary,
-    marginBottom: 12,
+    marginTop: avantTitre,
+    marginBottom: scale(12),
   },
   dateRow: {
     flexDirection: 'row',
@@ -1797,14 +1888,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dateLabel: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '700',
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   dateValue: {
-    fontSize: 15,
+    fontSize: scale(15),
     fontWeight: '800',
     color: colors.textPrimary,
     marginTop: 1,
@@ -1818,7 +1909,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
   },
   autoPillText: {
-    fontSize: 9.5,
+    fontSize: scale(9.5),
     fontWeight: '900',
     letterSpacing: 0.8,
     color: colors.emeraldPrimary,
@@ -1829,12 +1920,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     color: colors.textPrimary,
-    fontSize: 14,
+    fontSize: scale(14),
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
   helperText: {
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 4,
@@ -1855,25 +1946,30 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
   },
   stepBadgeText: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '900',
     color: colors.emeraldPrimary,
   },
   chipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: scale(8),
     marginTop: 2,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: scale(13),
+    paddingVertical: scale(9),
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.borderLight,
     backgroundColor: colors.backgroundLight,
+    // Une puce au libellé long (« Plantes parasitaires (loranthacées,
+    // épiphytes) ») s'arrête au bord de la carte et passe à la ligne, au lieu de
+    // déborder : c'est `maxWidth` qui autorise le retour à la ligne du texte.
+    maxWidth: '100%',
+    flexShrink: 1,
   },
   chipActive: {
     backgroundColor: colors.emeraldPrimary,
@@ -1883,9 +1979,11 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: scale(13),
+    lineHeight: scale(18),
     fontWeight: '700',
     color: colors.textSecondary,
+    flexShrink: 1,
   },
   chipTextActive: {
     color: '#FFFFFF',
@@ -1902,7 +2000,7 @@ const styles = StyleSheet.create({
   },
   emptyRefText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scale(12),
     color: colors.textSecondary,
   },
   numeroCard: {
@@ -1931,7 +2029,7 @@ const styles = StyleSheet.create({
   },
   numeroCardLabel: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '700',
     letterSpacing: 0.3,
     color: 'rgba(255,255,255,0.85)',
@@ -1944,20 +2042,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
   apercuPillText: {
-    fontSize: 9.5,
+    fontSize: scale(9.5),
     fontWeight: '900',
     letterSpacing: 0.8,
     color: '#FFFFFF',
   },
   numeroCardValue: {
-    fontSize: 26,
+    // « D-ABJ-ABJ-001 » avec un interlettrage large sortait de la carte sur les
+    // petits écrans : la taille et l'interlettrage cèdent avant la mise en page.
+    fontSize: scale(isSmallPhone ? 21 : 26),
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: isSmallPhone ? 0.5 : 2,
     color: '#FFFFFF',
   },
   numeroCardHint: {
     marginTop: 6,
-    fontSize: 11.5,
+    fontSize: scale(11.5),
     color: 'rgba(255,255,255,0.8)',
   },
   consentCard: {
@@ -1972,11 +2072,11 @@ const styles = StyleSheet.create({
   consentTitle: {
     color: colors.emeraldPrimary,
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: scale(13),
   },
   consentText: {
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: scale(11),
     marginTop: 2,
     lineHeight: 15,
   },
@@ -1999,14 +2099,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   voletEnteteTitre: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '800',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: colors.textSecondary,
   },
   voletEnteteCompteur: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '700',
     color: colors.emeraldPrimary,
   },
@@ -2019,19 +2119,30 @@ const styles = StyleSheet.create({
   voletTab: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
-    paddingVertical: 8,
-    paddingHorizontal: 11,
+    paddingVertical: scale(8),
+    paddingHorizontal: scale(10),
     borderRadius: 10,
     backgroundColor: colors.backgroundCard,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    // Trois onglets qui se partagent la largeur sans jamais la dépasser.
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: scale(96),
+    minWidth: 0,
   },
   voletTabActive: {
     backgroundColor: colors.emeraldPrimary,
     borderColor: colors.emeraldPrimary,
   },
-  voletTabText: { fontSize: 12.5, fontWeight: '600', color: colors.textPrimary },
+  voletTabText: {
+    fontSize: scale(12.5),
+    fontWeight: '600',
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
   voletTabTextActive: { color: colors.textLight },
   // Bandeau d'identité : répond en permanence à « quelle colonne je remplis ? ».
   voletBandeau: {
@@ -2047,42 +2158,49 @@ const styles = StyleSheet.create({
   },
   voletBandeauTexte: {
     flex: 1,
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '800',
     letterSpacing: 0.6,
     color: colors.emeraldPrimary,
   },
-  voletBandeauRang: { fontSize: 11, color: colors.textSecondary },
+  // Le rang ne se comprime pas : c'est le nom du volet qui cède la place.
+  voletBandeauRang: { fontSize: scale(11), color: colors.textSecondary, flexShrink: 0 },
   // Libellé de rubrique = ligne du tableau papier (Types, Agents, Fréquence…).
   rubriqueLabel: {
-    fontSize: 12.5,
+    fontSize: scale(12.5),
+    lineHeight: scale(17),
     fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: scale(16),
+    marginBottom: scale(8),
   },
 
   spSelector: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 16,
+    gap: scale(6),
+    marginBottom: scale(16),
     flexWrap: 'wrap',
   },
   spButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: scale(8),
+    paddingHorizontal: scale(10),
     alignItems: 'center',
     borderRadius: 10,
     backgroundColor: colors.backgroundLight,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    // Les 6 sous-placettes se répartissent la largeur et se replient sur deux
+    // rangées régulières plutôt que de dépasser à droite.
+    flexGrow: 1,
+    flexBasis: scale(60),
+    minWidth: scale(52),
   },
   spButtonActive: {
     backgroundColor: colors.emeraldPrimary,
     borderColor: colors.emeraldPrimary,
   },
   spText: {
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -2111,9 +2229,12 @@ const styles = StyleSheet.create({
     borderColor: colors.forestDark,
   },
   typeBtnText: {
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '700',
     color: colors.textPrimary,
+    // « Arbre d'ombrage » sur petit écran : le texte se resserre au lieu de
+    // faire grossir le bouton au-delà de sa moitié de largeur.
+    flexShrink: 1,
   },
   typeBtnTextActive: {
     color: colors.textLight,
@@ -2141,7 +2262,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.emeraldPrimary,
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: scale(13),
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -2171,9 +2292,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   photoBtnText: {
-    fontSize: 13,
+    fontSize: scale(13),
     fontWeight: '800',
     color: colors.emeraldPrimary,
+    flexShrink: 1,
   },
   photoRow: {
     flexDirection: 'row',
@@ -2193,7 +2315,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   photoRetakeText: {
-    fontSize: 13,
+    fontSize: scale(13),
     fontWeight: '700',
     color: colors.emeraldPrimary,
   },
@@ -2210,14 +2332,14 @@ const styles = StyleSheet.create({
   addMesureText: {
     color: colors.emeraldPrimary,
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: scale(13),
   },
   mesuresList: {
     marginTop: 16,
     gap: 8,
   },
   mesuresListTitle: {
-    fontSize: 12,
+    fontSize: scale(12),
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -2225,15 +2347,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.backgroundLight,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: scale(12),
+    paddingVertical: scale(8),
     borderRadius: 10,
     gap: 8,
+    // Le récapitulatif d'une mesure peut être long : il passe à la ligne dans
+    // sa pastille plutôt que de sortir de la carte.
+    minWidth: 0,
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
   mesureChipText: {
-    fontSize: 12,
+    fontSize: scale(12),
     color: colors.textPrimary,
     fontWeight: '600',
     flex: 1,
@@ -2252,7 +2377,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.error,
-    fontSize: 12.5,
+    fontSize: scale(12.5),
     fontWeight: '600',
     flex: 1,
   },
@@ -2289,7 +2414,7 @@ const styles = StyleSheet.create({
   nextBtnText: {
     fontWeight: '800',
     color: colors.textLight,
-    fontSize: 14,
+    fontSize: scale(14),
   },
   saveBtn: {
     flex: 1,
@@ -2307,6 +2432,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontWeight: '800',
     color: colors.textLight,
-    fontSize: 14,
+    fontSize: scale(14),
   },
-});
+  });
+};

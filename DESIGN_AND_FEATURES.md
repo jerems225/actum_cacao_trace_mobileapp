@@ -73,12 +73,34 @@ Aucune pratique et Autres demandent une précision écrite.
 | **Comptage contextuel** | Onglet *Cacaoyer* → seul « Nombre de cacaoyers » est affiché ; onglet *Arbre d'ombrage* → seul « Nombre d'arbres ». Les deux valeurs restent mémorisées par SP et partent ensemble à l'enregistrement. |
 | **Grosseur du sujet** | Cacaoyer : bascule **cm** ou **DBH (m)**, une seule des deux. Arbre d'ombrage : **DBH (m) uniquement**, pas de bascule. Changer de type vide le champ (unités différentes). |
 | **Quota SP2–SP6** | 3 cacaoyers maximum par sous-placette (bloquant) ; SP1 illimité (recensement). Arbres illimités partout. |
-| **État MALADE** | Maladie obligatoire (liste déroulante + « autre ») **et** photo de diagnostic obligatoire. |
-| **Maladie en liste déroulante** | Composant `SelectField` (`components/common/SelectField.tsx`) : champ fermé qui ouvre une feuille modale, avec recherche automatique au-delà de 8 entrées. Le référentiel s'enrichit au fil des validations — des chips finiraient par occuper tout l'écran. Aucune dépendance de picker ajoutée. |
-| **Maladie hors-liste** | Saisie par l'agent → ajoutée au référentiel en `A_VALIDER`, réutilisable par toute l'équipe après validation dans l'administration. |
+| **État sanitaire = cacaoyers seuls** | L'onglet *Arbre d'ombrage* n'affiche **pas** l'état de santé : le diagnostic porte sur la production de cacao, un arbre est relevé pour son espèce et sa grosseur. Basculer vers *Arbre* remet l'état à `VIVANT` et efface maladie et photo, pour ne pas transmettre un diagnostic saisi sur un cacaoyer. Le backend refuse tout état non `VIVANT` sur un arbre. |
+| **État MALADE** | Maladie obligatoire (liste déroulante) **et** photo de diagnostic obligatoire. |
+| **Espèce et maladie en listes déroulantes** | Composant `SelectField` (`components/common/SelectField.tsx`) : champ fermé qui ouvre une feuille modale, avec recherche automatique au-delà de 8 entrées. Les deux référentiels s'enrichissent au fil des validations — des chips finiraient par occuper tout l'écran. Aucune dépendance de picker ajoutée. |
+| **« Autres » en fin de liste** | L'option « Autres (à préciser) » est **la dernière** de chaque liste déroulante, et le champ de saisie n'apparaît **que** si elle est retenue. Auparavant un champ libre restait visible en permanence sous les puces, ce qui laissait croire à deux réponses possibles. |
+| **Valeur hors-liste** | Espèce ou maladie saisie par l'agent → ajoutée au référentiel en `A_VALIDER`, réutilisable par toute l'équipe après validation dans l'administration. Une espèce hors-liste est enregistrée comme non émettrice d'ombre. |
 | **Liste jamais vide** | Si le référentiel n'est pas encore synchronisé (1re installation, terrain sans réseau), un repli embarqué de 12 maladies courantes est proposé (`MALADIES_PAR_DEFAUT`). |
 
-### 1 quater. Typage des champs de saisie
+### 1 quinquies. Responsive et lisibilité
+
+Le système responsive vit dans `src/theme/responsive.ts` (`useResponsive`) :
+classe d'appareil déduite du **côté court** — donc stable à la rotation —,
+échelle typographique bornée, largeur de contenu maximale centrée.
+
+Le wizard de collecte n'en profitait pas : sa feuille de styles était figée, avec
+des tailles de texte en dur. Elle est désormais une **fabrique**
+(`createStyles(responsive)`, mémoïsée) :
+
+| Aspect | Traitement |
+|---|---|
+| **Tailles de texte** | Toutes passent par `scale()` : bornées entre ×0,88 (petit téléphone) et ×1,3 (tablette). Plus de texte tassé ni de texte perdu. |
+| **Hauteurs de ligne** | `lineHeight` explicite sur les titres, sous-titres et libellés : les majuscules accentuées (É, À) ne sont plus rognées. |
+| **Marges des titres** | Espace avant un titre de section proportionnel à l'écran (`avantTitre`), respiration nette entre titre et sous-titre. |
+| **Padding des cartes** | 15 px sur petit téléphone, 18 px en standard, 24 px sur tablette. |
+| **Anti-débordement** | Les puces reçoivent `maxWidth: '100%'` + `flexShrink` — un libellé long (« Plantes parasitaires (loranthacées, épiphytes) ») passe à la ligne au lieu de sortir de la carte. Les conteneurs en ligne reçoivent `minWidth: 0`, les textes longs `flex: 1`. |
+| **Répartition régulière** | Les 6 sous-placettes et les 3 onglets de volet se partagent la largeur (`flexGrow` + `flexBasis`) et se replient proprement. |
+| **Numéro de placette** | Taille et interlettrage réduits sur petit écran : `D-ABJ-ABJ-001` tenait mal dans sa carte. |
+
+### 1 sexies. Typage des champs de saisie
 
 Deux niveaux complémentaires, centralisés dans `src/utils/champs.ts` :
 
