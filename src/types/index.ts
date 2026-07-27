@@ -1,4 +1,4 @@
-export type TabType = 'home' | 'enquetes' | 'collecte' | 'carte' | 'sync';
+export type TabType = 'home' | 'enquetes' | 'collecte' | 'carte' | 'sync' | 'parametres';
 
 // Aligné sur l'enum Role du backend (Prisma). AGENT_TERRAIN et CHEF_EQUIPE
 // s'authentifient par code agent (mobile) ; les autres via email/mot de passe.

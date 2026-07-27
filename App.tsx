@@ -11,6 +11,7 @@ import { EnquetesScreen } from './src/screens/EnquetesScreen';
 import { CollecteWizardScreen } from './src/screens/CollecteWizardScreen';
 import { CarteScreen } from './src/screens/CarteScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
+import { ParametresScreen } from './src/screens/ParametresScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { offlineStorage } from './src/services/storage';
 import { delegationsService } from './src/services/delegations';
@@ -19,10 +20,25 @@ import { referentielsService } from './src/services/referentiels';
 import { authService, UserProfile } from './src/services/auth';
 import { notificationService, AppNotification } from './src/services/notification';
 import { toast } from './src/components/common/Toast';
-import { colors } from './src/theme';
+import { ThemeProvider, useTheme } from './src/theme';
 import type { TabType } from './src/types';
 
+/**
+ * `App` ne fait que fournir le thème ; tout le contenu vit dans `Application`.
+ * Deux composants, parce qu'un consommateur de contexte ne peut pas être celui
+ * qui le fournit : `useTheme()` appelé dans `App` renverrait la valeur par
+ * défaut, pas celle du Provider.
+ */
 export default function App() {
+  return (
+    <ThemeProvider>
+      <Application />
+    </ThemeProvider>
+  );
+}
+
+function Application() {
+  const { palette, estSombre } = useTheme();
   const [isReady, setIsReady] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -147,7 +163,7 @@ export default function App() {
   if (!splashFinished) {
     return (
       <>
-        <StatusBar style="dark" />
+        <StatusBar style={estSombre ? 'light' : 'dark'} />
         <AnimatedSplash onFinish={() => setSplashFinished(true)} />
       </>
     );
@@ -157,8 +173,8 @@ export default function App() {
   if (!isReady) {
     return (
       <View style={[styles.container, styles.center, styles.splashFallback]}>
-        <StatusBar style="dark" />
-        <ActivityIndicator size="large" color={colors.emeraldPrimary} />
+        <StatusBar style={estSombre ? 'light' : 'dark'} />
+        <ActivityIndicator size="large" color={palette.emeraldPrimary} />
       </View>
     );
   }
@@ -213,14 +229,22 @@ export default function App() {
         return <CarteScreen {...screenProps} />;
       case 'sync':
         return <SyncScreen {...screenProps} />;
+      case 'parametres':
+        return (
+          <ParametresScreen
+            {...screenProps}
+            onProfileUpdated={handleProfileUpdated}
+            onLogout={handleLogout}
+          />
+        );
       default:
         return <HomeScreen {...screenProps} />;
     }
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
+    <View style={[styles.container, { backgroundColor: palette.backgroundLight }]}>
+      <StatusBar style={estSombre ? 'light' : 'dark'} />
       {renderActiveScreen()}
       <FloatingTabBar
         activeTab={activeTab}
@@ -247,8 +271,8 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: {
+    // Le fond est fourni à l'usage depuis la palette active (thème clair/sombre).
     flex: 1,
-    backgroundColor: colors.backgroundLight,
   },
   center: {
     alignItems: 'center',

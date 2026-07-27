@@ -89,6 +89,27 @@ export interface AgentCodeStatus {
   doitDefinirCodeSecurite: boolean;
 }
 
+/** Réponse du changement d'identifiant (POST /auth/change-credential). */
+export interface ChangeCredentialResponse {
+  type: 'CODE_SECURITE' | 'MOT_DE_PASSE';
+  /** Libellé en clair fourni par le serveur (« code de sécurité »…). */
+  libelle: string;
+  /** Vrai si l'identifiant n'existait pas encore (agent réinitialisé). */
+  premiereDefinition: boolean;
+  modifieLe: string;
+}
+
+/** Une entrée du journal d'activité (GET /auth/activity). */
+export interface ActivityEntry {
+  id: string;
+  action: string;
+  /** Libellé lisible fourni par le serveur, pour éviter deux tables de libellés. */
+  libelle: string;
+  details: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
 
 export const apiClient = {
   // --- Authentification ---
@@ -125,6 +146,32 @@ export const apiClient = {
       method: 'PATCH',
       body: updates,
     });
+  },
+
+  /**
+   * Change son propre identifiant. Le serveur décide de la nature traitée
+   * (code de sécurité pour un agent terrain, mot de passe pour un compte
+   * administration) et la renvoie : le mobile n'a pas à deviner.
+   */
+  changeCredential(payload: {
+    ancien?: string;
+    nouveau: string;
+  }): Promise<ChangeCredentialResponse> {
+    return apiRequest<ChangeCredentialResponse>('/auth/change-credential', {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
+  /** Journal d'activité du compte (connexions, envois, modifications). */
+  async getActivity(limit = 20): Promise<ActivityEntry[]> {
+    const reponse = await apiRequest<ActivityEntry[] | { entries?: ActivityEntry[] }>(
+      `/auth/activity?limit=${limit}`,
+    );
+    // Même précaution que pour /sync/push : le backend encapsule dans un objet,
+    // on tolère les deux formes pour ne pas casser sur une évolution de contrat.
+    if (Array.isArray(reponse)) return reponse;
+    return Array.isArray(reponse?.entries) ? reponse.entries : [];
   },
 
   // --- Référentiel géographique ---

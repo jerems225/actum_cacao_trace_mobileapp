@@ -16,6 +16,7 @@ import {
   type NotificationType,
 } from './repositories/notification.repository';
 import { generateId, nowIso } from './repositories/ids';
+import { preferencesService } from './preferences';
 
 export type { AppNotification, NotificationType };
 
@@ -32,6 +33,11 @@ class NotificationService {
   /** Demande les permissions, configure le canal Android et enregistre le push token. */
   async initPermissions(): Promise<boolean> {
     try {
+      // Préférence de l'agent (écran Paramètres) : s'il a coupé les alertes, on
+      // ne redemande pas la permission système à chaque ouverture.
+      const prefs = await preferencesService.get();
+      if (!prefs.notificationsActives) return false;
+
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
       if (existingStatus !== 'granted') {
@@ -94,6 +100,12 @@ class NotificationService {
       ...cible,
     };
     await notificationRepository.add(notif);
+
+    // L'historique est TOUJOURS écrit, même alertes coupées : couper les
+    // notifications veut dire « ne m'interromps pas », pas « perds l'information ».
+    // L'agent la retrouve dans la cloche de l'en-tête.
+    const prefs = await preferencesService.get();
+    if (!prefs.notificationsActives) return notif;
 
     try {
       await Notifications.scheduleNotificationAsync({
