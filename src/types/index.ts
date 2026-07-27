@@ -389,6 +389,12 @@ export interface PlacetteLocal {
 
 export interface SousPlacetteLocal {
   id: string;
+  /**
+   * Identifiant serveur, renseigné à la synchronisation.
+   * Indispensable pour modifier ou supprimer la sous-placette ensuite : sans lui
+   * le mobile ne pourrait qu'en créer de nouvelles.
+   */
+  serverId?: string;
   placetteId: string;
   numero: number;
   nombrePlantsCacao?: number;
@@ -399,6 +405,8 @@ export interface SousPlacetteLocal {
 
 export interface MesureArbreLocal {
   id: string;
+  /** Identifiant serveur — voir SousPlacetteLocal.serverId. */
+  serverId?: string;
   sousPlacetteId: string;
   typeSujet: TypeSujet;
   espece?: string;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -58,7 +58,6 @@ import type {
   PointGPS,
   TabType,
   SousPlacetteLocal,
-  MesureArbreLocal,
   Delegation,
   PlacetteLocal,
   Espece,
@@ -73,6 +72,14 @@ interface CollecteWizardScreenProps {
   onNotificationPress?: () => void;
   unreadCount?: number;
   user?: UserProfile | null;
+  /**
+   * Identifiant local de la parcelle à reprendre. Renseigné = mode modification :
+   * le même parcours de saisie, prérempli, et un envoi en modification plutôt
+   * qu'en création.
+   */
+  editParcelleId?: string | null;
+  /** Appelé quand la reprise est terminée, pour libérer le mode modification. */
+  onEditDone?: () => void;
 }
 
 /**
@@ -144,6 +151,12 @@ const DRAFT_VIDE: MesureDraft = {
 
 /** Mesure saisie en cours de collecte, rattachée à un numéro de sous-placette. */
 interface MesureCollectee {
+  /**
+   * Identifiant local, présent uniquement pour une mesure rechargée depuis un
+   * brouillon. C'est la clé d'appariement qui permet de la MODIFIER plutôt que
+   * de la recréer à l'enregistrement (voir storage.diffMesures).
+   */
+  id?: string;
   numeroSP: number;
   typeSujet: TypeSujet;
   espece?: string;
@@ -165,7 +178,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   onNotificationPress,
   unreadCount,
   user,
+  editParcelleId,
+  onEditDone,
 }) => {
+  const modeEdition = !!editParcelleId;
   const responsive = useResponsive();
   const { paddingHorizontal, contentStyle } = responsive;
   // Recalculé uniquement quand les dimensions changent (rotation, tablette).
@@ -173,6 +189,9 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [chargementEdition, setChargementEdition] = useState(false);
+  // Référence de la ScrollView : sert à remonter en haut à chaque étape.
+  const scrollRef = useRef<ScrollView>(null);
 
   // --- Bloc A ---
   const [nom, setNom] = useState('');
@@ -536,21 +555,53 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
    */
   const champsManquants = (): string[] => {
     const manque: string[] = [];
+
+    // Bloc A — identité et consentement.
     if (!nom.trim()) manque.push('Nom du producteur (Bloc A)');
     if (!prenoms.trim()) manque.push('Prénoms du producteur (Bloc A)');
     if (!rgpdConsent) manque.push('Consentement du producteur (Bloc A)');
+
+    // Bloc B — sans superficie ni année, la parcelle n'est pas exploitable dans
+    // les restitutions (densité, âge du verger).
+    if (!superficie.trim()) manque.push('Superficie déclarée (Bloc B)');
+    if (!anneeParcelle.trim()) manque.push("Année d'installation de la parcelle (Bloc B)");
+    if (pratiquesRetenues.length === 0) {
+      // « Aucune pratique » existe justement pour ce cas : ne rien cocher n'est
+      // pas une réponse, c'est une question restée sans réponse.
+      manque.push('Pratiques culturales — au moins une case (Bloc B)');
+    }
     if (pratiquesRetenues.includes(PratiqueRetenue.AUCUNE) && !aucunePrecision.trim()) {
       manque.push('B4.1 — précision « Aucune pratique » (Bloc B)');
     }
     if (pratiquesRetenues.includes(PratiqueRetenue.AUTRES) && !autresPrecision.trim()) {
       manque.push('B4.2 — précision « Autres pratiques » (Bloc B)');
     }
+    // Un volet coché doit être détaillé : le backend refuse l'incohérence.
+    for (const volet of voletsCoches) {
+      if (voletsDetail[volet].types.length === 0) {
+        manque.push(`${PRATIQUE_RETENUE_LABELS[volet]} — type de pratique (Bloc B)`);
+      }
+    }
+
+    // Bloc C — localisation et traçabilité de la collecte.
     if (!delegationId) manque.push('Délégation (Bloc C)');
     if (!villeId) manque.push('Ville (Bloc C)');
+    if (!village.trim()) manque.push('Village / localité (Bloc C)');
+    if (!chefEquipe.trim()) manque.push("Chef d'équipe (Bloc C)");
     const ordres = new Set(sommetsOnly.map((s) => s.ordreSommet));
     if (sommetsOnly.length !== 4 || ![1, 2, 3, 4].every((n) => ordres.has(n))) {
       manque.push(`Sommets GPS de la placette (${sommetsOnly.length}/4) — Bloc C`);
     }
+
+    // Bloc D — une placette sans aucune mesure ne documente rien.
+    if (mesuresCollectees.length === 0) {
+      manque.push('Au moins une mesure dendrométrique (Bloc D)');
+    }
+    // SP1 porte le recensement des cacaoyers de la placette.
+    if (!(nombrePlantsBySP[1] ?? '').trim()) {
+      manque.push('SP1 — nombre de cacaoyers recensés (Bloc D)');
+    }
+
     return manque;
   };
 
@@ -643,6 +694,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     // placette (échantillon interne) tant que la capture GPS dédiée par
     // sous-placette n'est pas implémentée.
     return Array.from(spNums).map((numero) => ({
+      // ids laissés vides : ils sont attribués (création) ou retrouvés par
+      // appariement sur le `numero` (modification) côté storage.
       id: '',
       placetteId: '',
       numero,
@@ -652,7 +705,9 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       mesures: mesuresCollectees
         .filter((m) => m.numeroSP === numero)
         .map((m) => ({
-          id: '',
+          // Une mesure rechargée d'un brouillon garde son id : c'est la clé qui
+          // la fera MODIFIER et non recréer. Une mesure neuve n'en a pas encore.
+          id: m.id ?? '',
           sousPlacetteId: '',
           typeSujet: m.typeSujet,
           espece: m.espece,
@@ -698,7 +753,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
     setSaving(true);
     try {
-      const { producteur } = await offlineStorage.saveCompleteCollecte({
+      const donnees = {
         producteur: {
           nom: nom.trim(),
           prenoms: prenoms.trim(),
@@ -739,15 +794,36 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           sommets: points,
           sousPlacettes: buildSousPlacettes(),
         },
-      });
+      };
 
-      await notificationService.notifyCollecteEnregistree(`${producteur.prenoms} ${producteur.nom}`);
+      if (editParcelleId) {
+        // Reprise : envoi en MODIFICATION. Le diff est fait par le storage, qui
+        // apparie sous-placettes et mesures pour ne recréer que le nouveau.
+        const maj = await offlineStorage.updateCompleteCollecte({
+          parcelleId: editParcelleId,
+          producteur: donnees.producteur,
+          parcelle: donnees.parcelle,
+          placette: donnees.placette,
+        });
+        if (!maj) {
+          showError('Collecte introuvable : la modification n\'a pas pu être enregistrée.');
+          return;
+        }
+      } else {
+        await offlineStorage.saveCompleteCollecte(donnees);
+        await notificationService.notifyCollecteEnregistree(
+          `${donnees.producteur.prenoms} ${donnees.producteur.nom}`,
+        );
+      }
 
       toast.success(
         statut === StatutCollecte.BROUILLON
           ? 'Brouillon enregistré. Vous pourrez le compléter depuis « Enquêtes ».'
-          : 'Collecte soumise. Données mises en file de synchronisation.',
+          : editParcelleId
+            ? 'Collecte complétée et soumise.'
+            : 'Collecte soumise. Données mises en file de synchronisation.',
       );
+      onEditDone?.();
       onNavigate('enquetes');
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Erreur inconnue.';
@@ -759,11 +835,130 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
   const mesuresPourSP = mesuresCollectees.filter((m) => m.numeroSP === selectedSP);
 
+  // Chaque changement d'étape ramène en haut : sans cela l'agent arrive au
+  // milieu du bloc suivant, à la hauteur de défilement qu'il avait laissée.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [currentStep]);
+
+  /**
+   * Mode modification : recharge la collecte et repeuple TOUS les blocs.
+   * Le parcours de saisie est le même qu'à la création — seul l'enregistrement
+   * diffère (modification et non ajout).
+   */
+  useEffect(() => {
+    if (!editParcelleId) return;
+    let annule = false;
+
+    (async () => {
+      setChargementEdition(true);
+      const collecte = await offlineStorage.getCollecte(editParcelleId);
+      if (annule) return;
+
+      if (!collecte) {
+        toast.error('Collecte introuvable en local.');
+        setChargementEdition(false);
+        onEditDone?.();
+        return;
+      }
+
+      const { producteur: prod, parcelle: parc, placette: plc } = collecte;
+
+      // Bloc A
+      setNom(prod.nom);
+      setPrenoms(prod.prenoms);
+      setGenre(prod.genre ?? null);
+      setTrancheAge(prod.trancheAge ?? null);
+      setIdentite(prod.identiteProprietaire ?? '');
+      setRgpdConsent(prod.consentementDonne);
+
+      // Bloc B — les nombres redeviennent des chaînes : le formulaire travaille
+      // en texte, la conversion se fait à l'enregistrement.
+      setAnneeParcelle(parc.anneeParcelle != null ? String(parc.anneeParcelle) : '');
+      setSuperficie(parc.superficie != null ? String(parc.superficie) : '');
+      setProductionEstimee(parc.productionEstimee != null ? String(parc.productionEstimee) : '');
+      setPratiquesRetenues(parc.pratiquesRetenues ?? []);
+      setAucunePrecision(parc.aucunePratiquePrecision ?? '');
+      setAutresPrecision(parc.autresPratiquesPrecision ?? '');
+      if (parc.pratiques?.length) {
+        setVoletsDetail((prev) => {
+          const suivant = { ...prev };
+          for (const p of parc.pratiques!) {
+            suivant[p.volet] = {
+              types: p.types ?? [],
+              typesAutre: p.typesAutre ?? '',
+              agents: p.agents ?? [],
+              agentsAutre: p.agentsAutre ?? '',
+              frequence: p.frequence ?? null,
+              frequenceAutre: p.frequenceAutre ?? '',
+              nombreFoisParAn: p.nombreFoisParAn != null ? String(p.nombreFoisParAn) : '',
+            };
+          }
+          return suivant;
+        });
+      }
+
+      // Bloc C
+      if (plc) {
+        setDelegationId(plc.delegationId ?? null);
+        setVilleId(plc.villeId ?? null);
+        setVillage(plc.village ?? '');
+        setChefEquipe(plc.chefEquipe ?? '');
+        setPoints(plc.sommets ?? []);
+
+        // Bloc D : compteurs par SP et mesures, en conservant l'identifiant local
+        // de chaque mesure — c'est lui qui permettra de la modifier plutôt que
+        // d'en créer une nouvelle.
+        const plants: Record<number, string> = {};
+        const arbres: Record<number, string> = {};
+        const mesures: MesureCollectee[] = [];
+        for (const sp of plc.sousPlacettes ?? []) {
+          if (sp.nombrePlantsCacao != null) plants[sp.numero] = String(sp.nombrePlantsCacao);
+          if (sp.nombreArbres != null) arbres[sp.numero] = String(sp.nombreArbres);
+          for (const m of sp.mesures ?? []) {
+            mesures.push({
+              id: m.id,
+              numeroSP: sp.numero,
+              typeSujet: m.typeSujet,
+              espece: m.espece,
+              especeId: m.especeId,
+              especeLibre: m.especeLibre,
+              emetOmbre: m.emetOmbre,
+              circonference30cm: m.circonference30cm,
+              circonferenceDBH: m.circonferenceDBH,
+              hauteurTotale: m.hauteurTotale,
+              etatSanitaire: m.etatSanitaire,
+              maladieId: m.maladieId,
+              maladieLibre: m.maladieLibre,
+              photoMaladie: m.photoMaladie,
+            });
+          }
+        }
+        setNombrePlantsBySP(plants);
+        setNombreArbresBySP(arbres);
+        setMesuresCollectees(mesures);
+      }
+
+      setChargementEdition(false);
+    })();
+
+    return () => {
+      annule = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParcelleId]);
+
   return (
     <View style={styles.container}>
       <Header
-        title="Nouvelle collecte"
-        subtitle="Producteur & parcelle"
+        title={modeEdition ? 'Compléter la collecte' : 'Nouvelle collecte'}
+        subtitle={
+          chargementEdition
+            ? 'Chargement de la fiche…'
+            : modeEdition
+              ? 'Reprise du brouillon — mêmes étapes, données déjà en place'
+              : 'Producteur & parcelle'
+        }
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
         avatarUri={user?.avatarUri}
@@ -807,6 +1002,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingHorizontal }, contentStyle]}
         showsVerticalScrollIndicator={false}
@@ -1782,7 +1978,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             >
               <Feather name="check" size={18} color={colors.textLight} />
               <Text style={styles.saveBtnText}>
-                {saving ? 'Enregistrement…' : 'Soumettre la collecte'}
+                {saving
+                  ? 'Enregistrement…'
+                  : modeEdition
+                    ? 'Compléter et soumettre'
+                    : 'Soumettre la collecte'}
               </Text>
             </TouchableOpacity>
             <Text style={styles.actionsFinAide}>

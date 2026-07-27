@@ -14,13 +14,14 @@ import { Header } from '../components/common/Header';
 import { SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
 import { offlineStorage } from '../services/storage';
-import { toast } from '../components/common/Toast';
 import type { UserProfile } from '../services/auth';
-import type { ParcelleLocal, ProducteurLocal, PlacetteLocal, TabType } from '../types';
+import type { ParcelleLocal, PlacetteLocal, TabType } from '../types';
 import { formatRole, StatutCollecte, STATUT_COLLECTE_LABELS } from '../types';
 
 interface EnquetesScreenProps {
   onNavigate?: (tab: TabType) => void;
+  /** Ouvre le wizard prérempli sur ce brouillon (reprise pour complétion). */
+  onEditCollecte?: (parcelleId: string) => void;
   onProfilePress?: () => void;
   onNotificationPress?: () => void;
   unreadCount?: number;
@@ -29,6 +30,7 @@ interface EnquetesScreenProps {
 
 export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   onNavigate,
+  onEditCollecte,
   onProfilePress,
   onNotificationPress,
   unreadCount,
@@ -37,18 +39,15 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   const { paddingHorizontal, isTablet, cardColumns, contentStyle } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [parcelles, setParcelles] = useState<ParcelleLocal[]>([]);
-  const [producteurs, setProducteurs] = useState<ProducteurLocal[]>([]);
   const [placettes, setPlacettes] = useState<PlacetteLocal[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'geolocalisees' | 'maladies'>('all');
   const [selectedParcelle, setSelectedParcelle] = useState<ParcelleLocal | null>(null);
 
-  // --- État d'édition (modification + persistance) ---
-  const [editMode, setEditMode] = useState(false);
-  const [editSuperficie, setEditSuperficie] = useState('');
-  const [editMaladies, setEditMaladies] = useState('');
-  const [editProduction, setEditProduction] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
+  // Plus d'édition en ligne ici : la correction d'un brouillon passe par le
+  // parcours de saisie complet, prérempli (bouton « Compléter la fiche »). Un
+  // second formulaire partiel divergeait du wizard — il écrivait encore
+  // `maladiesObservees`, champ désormais déprécié.
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -56,11 +55,13 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
   }, []);
 
   const loadData = async () => {
-    const pList = await offlineStorage.getParcelles();
-    const prodList = await offlineStorage.getProducteurs();
-    const plcList = await offlineStorage.getPlacettes();
+    // Le nom du producteur est dénormalisé sur la parcelle (`producteurNom`) :
+    // l'écran n'a donc pas besoin de charger la liste des producteurs.
+    const [pList, plcList] = await Promise.all([
+      offlineStorage.getParcelles(),
+      offlineStorage.getPlacettes(),
+    ]);
     setParcelles(pList);
-    setProducteurs(prodList);
     setPlacettes(plcList);
     setLoading(false);
   };
@@ -92,13 +93,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
     return true;
   });
 
-  const openParcelle = (parcelle: ParcelleLocal) => {
-    setSelectedParcelle(parcelle);
-    setEditMode(false);
-    setEditSuperficie(parcelle.superficie != null ? String(parcelle.superficie) : '');
-    setEditMaladies(parcelle.maladiesObservees || '');
-    setEditProduction(parcelle.productionEstimee != null ? String(parcelle.productionEstimee) : '');
-  };
+  const openParcelle = (parcelle: ParcelleLocal) => setSelectedParcelle(parcelle);
 
   /**
    * Une collecte soumise est verrouillée pour le terrain : l'agent l'a déclarée
@@ -107,32 +102,6 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
    * comme soumises — elles l'ont été sous un flux qui exigeait une fiche complète.
    */
   const estModifiable = (p: ParcelleLocal) => p.statutCollecte === StatutCollecte.BROUILLON;
-
-  const handleSaveEdit = async () => {
-    if (!selectedParcelle) return;
-    if (!estModifiable(selectedParcelle)) {
-      toast.error(
-        'Cette collecte a été soumise : la correction passe par l\'administration.',
-      );
-      return;
-    }
-    setSavingEdit(true);
-    const parseNum = (v: string): number | undefined => {
-      const n = parseFloat(v.replace(',', '.'));
-      return Number.isFinite(n) ? n : undefined;
-    };
-    const updated = await offlineStorage.updateParcelle(selectedParcelle.id, {
-      superficie: parseNum(editSuperficie),
-      maladiesObservees: editMaladies.trim() || undefined,
-      productionEstimee: parseNum(editProduction),
-    });
-    setSavingEdit(false);
-    if (updated) {
-      await loadData();
-      setSelectedParcelle(updated);
-      setEditMode(false);
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -316,14 +285,14 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editMode ? 'Modifier la Parcelle' : 'Fiche du producteur'}
+                Fiche du producteur
               </Text>
               <TouchableOpacity onPress={() => setSelectedParcelle(null)}>
                 <Feather name="x" size={22} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
 
-            {selectedParcelle && !editMode && (
+            {selectedParcelle && (
               <ScrollView style={{ maxHeight: 400 }}>
                 <Text style={styles.detailLabel}>Producteur</Text>
                 <Text style={styles.detailValue}>{selectedParcelle.producteurNom || '—'}</Text>
@@ -333,12 +302,11 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                   {selectedParcelle.superficie != null ? `${selectedParcelle.superficie} Hectares` : '—'}
                 </Text>
 
-                <Text style={styles.detailLabel}>Pratiques Culturales (Entretien)</Text>
-                <Text style={styles.detailValue}>{selectedParcelle.typeEntretien || '—'}</Text>
-
-                <Text style={styles.detailLabel}>État Sanitaire & Maladies</Text>
+                <Text style={styles.detailLabel}>Pratiques culturales déclarées</Text>
                 <Text style={styles.detailValue}>
-                  {selectedParcelle.maladiesObservees || 'Aucune maladie observée'}
+                  {selectedParcelle.pratiquesRetenues?.length
+                    ? selectedParcelle.pratiquesRetenues.join(' • ')
+                    : '—'}
                 </Text>
 
                 <Text style={styles.detailLabel}>Production estimée</Text>
@@ -373,76 +341,30 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
               </ScrollView>
             )}
 
-            {selectedParcelle && editMode && (
-              <ScrollView style={{ maxHeight: 400 }}>
-                <Text style={styles.detailLabel}>Superficie (ha)</Text>
-                <TextInput
-                  style={styles.editInput}
-                  keyboardType="decimal-pad"
-                  value={editSuperficie}
-                  onChangeText={setEditSuperficie}
-                  placeholder="ex: 3.5"
-                  placeholderTextColor={colors.textMuted}
-                />
-
-                <Text style={styles.detailLabel}>Maladies & Attaques observées</Text>
-                <TextInput
-                  style={styles.editInput}
-                  value={editMaladies}
-                  onChangeText={setEditMaladies}
-                  placeholder="ex: Swollen Shoot"
-                  placeholderTextColor={colors.textMuted}
-                />
-
-                <Text style={styles.detailLabel}>Production estimée (kg/an)</Text>
-                <TextInput
-                  style={styles.editInput}
-                  keyboardType="numeric"
-                  value={editProduction}
-                  onChangeText={setEditProduction}
-                  placeholder="ex: 1400"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </ScrollView>
-            )}
-
-            {editMode ? (
-              <View style={styles.modalActionsRow}>
-                <TouchableOpacity
-                  style={[styles.closeBtn, styles.cancelBtn]}
-                  onPress={() => setEditMode(false)}
-                  disabled={savingEdit}
-                >
-                  <Text style={styles.cancelBtnText}>Annuler</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.closeBtn, { flex: 1 }, savingEdit && { opacity: 0.6 }]}
-                  onPress={handleSaveEdit}
-                  disabled={savingEdit}
-                >
-                  <Text style={styles.closeBtnText}>
-                    {savingEdit ? 'Enregistrement…' : 'Enregistrer'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.modalActionsRow}>
-                <TouchableOpacity
-                  style={[styles.closeBtn, styles.cancelBtn]}
-                  onPress={() => setSelectedParcelle(null)}
-                >
-                  <Text style={styles.cancelBtnText}>Fermer</Text>
-                </TouchableOpacity>
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={[styles.closeBtn, styles.cancelBtn]}
+                onPress={() => setSelectedParcelle(null)}
+              >
+                <Text style={styles.cancelBtnText}>Fermer</Text>
+              </TouchableOpacity>
                 {/* Le bouton « Modifier » n'apparaît que sur un brouillon : une
                     fiche soumise est verrouillée pour le terrain. Le message
                     explique où aller plutôt que de laisser l'agent buter. */}
                 {selectedParcelle && estModifiable(selectedParcelle) ? (
+                  // Reprise dans le parcours de saisie complet, prérempli : c'est
+                  // le seul moyen de compléter les sommets GPS ou l'identité du
+                  // producteur, que la modale ne couvre pas.
                   <TouchableOpacity
                     style={[styles.closeBtn, { flex: 1 }]}
-                    onPress={() => setEditMode(true)}
+                    onPress={() => {
+                      const id = selectedParcelle.id;
+                      setSelectedParcelle(null);
+                      onEditCollecte?.(id);
+                    }}
                   >
                     <Feather name="edit-2" size={15} color={colors.textLight} />
-                    <Text style={styles.closeBtnText}>  Modifier</Text>
+                    <Text style={styles.closeBtnText}>  Compléter la fiche</Text>
                   </TouchableOpacity>
                 ) : (
                   <View style={[styles.verrouBox, { flex: 1 }]}>
@@ -452,8 +374,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                     </Text>
                   </View>
                 )}
-              </View>
-            )}
+            </View>
           </View>
         </View>
       </Modal>

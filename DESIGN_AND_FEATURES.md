@@ -55,8 +55,42 @@ sa place :
 
 | Statut | Comportement mobile |
 |---|---|
-| **Brouillon** | Badge orange dans « Enquêtes ». Synchronisé quand même (rien n'est perdu si l'appareil casse) mais exclu des statistiques et des exports côté serveur. |
-| **Soumise** | Le bouton « Modifier » disparaît de la fiche, remplacé par un encart verrouillé qui indique où adresser la correction. Le backend refuse aussi la modification arrivée par la synchro. |
+| **Brouillon** | Badge orange dans « Enquêtes », et bouton **« Compléter la fiche »**. Synchronisé quand même (rien n'est perdu si l'appareil casse) mais exclu des statistiques et des exports côté serveur. |
+| **Soumise** | Le bouton disparaît de la fiche, remplacé par un encart verrouillé qui indique où adresser la correction. Le backend refuse aussi la modification arrivée par la synchro. |
+
+**Reprise d'un brouillon** — « Compléter la fiche » réouvre **le parcours de
+saisie complet**, prérempli, et non un formulaire réduit : c'est le seul moyen de
+compléter les sommets GPS ou l'identité du producteur. L'enregistrement part
+alors en **modification** et non en création.
+
+L'appariement se fait sur des clés stables, pour modifier au lieu de recréer :
+
+| Entité | Clé d'appariement | Cas traités |
+|---|---|---|
+| Producteur, Parcelle, Placette | identifiant local (déjà connu) | UPDATE |
+| Sous-placette | `numero` (SP1…SP6) | UPDATE / CREATE / DELETE |
+| Mesure | identifiant local, conservé au rechargement | UPDATE / CREATE / DELETE |
+
+Cela suppose que le mobile connaisse les identifiants **serveur** des entités
+imbriquées : `SousPlacetteLocal.serverId` et `MesureArbreLocal.serverId` sont
+renseignés à la synchronisation (`markSynced`) et alimentent la table de
+correspondance du `SyncManager`. Sans eux, une correction repartirait en création.
+
+Le numéro de placette n'est **jamais** régénéré à la reprise : il a été attribué
+de façon autoritative par le serveur et sert de référence terrain.
+
+**Informations requises pour soumettre** (liste à ajuster si le terrain la trouve
+trop stricte) :
+
+- **Bloc A** : nom, prénoms, consentement du producteur ;
+- **Bloc B** : superficie, année d'installation, au moins une case de pratiques
+  cochée, type de pratique pour chaque volet coché, précisions B4.1 / B4.2 le cas
+  échéant ;
+- **Bloc C** : délégation, ville, village, chef d'équipe, les 4 sommets GPS ;
+- **Bloc D** : au moins une mesure, et le nombre de cacaoyers recensés en SP1.
+
+**Défilement** — chaque changement d'étape ramène en haut de page : sans cela
+l'agent arrive au milieu du bloc suivant, à la hauteur qu'il avait laissée.
 
 Statut métier et état de synchronisation sont **deux axes distincts**, affichés
 séparément dans la fiche : une collecte peut être « soumise mais pas encore

@@ -195,6 +195,191 @@ class OfflineStorageService {
     return updated;
   }
 
+  /**
+   * Charge une collecte complète pour reprise dans le wizard.
+   * Retourne `null` si la parcelle ou son producteur a disparu.
+   */
+  async getCollecte(parcelleId: string): Promise<{
+    producteur: ProducteurLocal;
+    parcelle: ParcelleLocal;
+    placette: PlacetteLocal | null;
+  } | null> {
+    const parcelle = await parcelleRepository.findById(parcelleId);
+    if (!parcelle) return null;
+    const producteur = await producteurRepository.findById(parcelle.producteurId);
+    if (!producteur) return null;
+    const placettes = await placetteRepository.findAll();
+    const placette = placettes.find((p) => p.parcelleId === parcelleId) ?? null;
+    return { producteur, parcelle, placette };
+  }
+
+  /**
+   * Met à jour une collecte existante (reprise d'un brouillon).
+   *
+   * Modification ENTITÉ PAR ENTITÉ, et non remplacement en bloc : chaque
+   * sous-placette et chaque mesure conserve son identifiant serveur d'un
+   * passage à l'autre. L'appariement se fait sur des clés stables — le `numero`
+   * pour les sous-placettes, l'identifiant local pour les mesures — ce qui
+   * permet de distinguer trois cas : présent des deux côtés → UPDATE, nouveau
+   * → CREATE, disparu → DELETE.
+   */
+  async updateCompleteCollecte(input: {
+    parcelleId: string;
+    producteur: Partial<NewProducteur>;
+    parcelle: Partial<Omit<NewParcelle, 'producteurId'>>;
+    placette: Omit<NewPlacette, 'parcelleId'>;
+  }): Promise<{ parcelle: ParcelleLocal } | null> {
+    const courant = await this.getCollecte(input.parcelleId);
+    if (!courant) return null;
+
+    await this.updateProducteur(courant.producteur.id, {
+      ...input.producteur,
+      // Le nom dénormalisé sur la parcelle doit suivre une correction d'identité.
+    });
+    const parcelle = await this.updateParcelle(courant.parcelle.id, {
+      ...input.parcelle,
+      producteurNom: `${input.producteur.prenoms ?? courant.producteur.prenoms} ${
+        input.producteur.nom ?? courant.producteur.nom
+      }`,
+    });
+
+    if (courant.placette) {
+      await this.updatePlacetteTree(courant.placette, input.placette);
+    } else {
+      // Cas limite : brouillon enregistré sans placette (aucun point relevé).
+      await this.savePlacette({ ...input.placette, parcelleId: courant.parcelle.id });
+    }
+
+    return parcelle ? { parcelle } : null;
+  }
+
+  /** Applique le diff sous-placettes / mesures d'une placette existante. */
+  private async updatePlacetteTree(
+    existante: PlacetteLocal,
+    entrant: Omit<NewPlacette, 'parcelleId'>,
+  ): Promise<void> {
+    const ancienesParNumero = new Map(existante.sousPlacettes.map((sp) => [sp.numero, sp]));
+    const numerosEntrants = new Set((entrant.sousPlacettes ?? []).map((sp) => sp.numero));
+
+    const sousPlacettes: SousPlacetteLocal[] = [];
+
+    for (const entrante of entrant.sousPlacettes ?? []) {
+      const ancienne = ancienesParNumero.get(entrante.numero);
+
+      if (!ancienne) {
+        // Sous-placette apparue depuis le brouillon → création.
+        const sousPlacetteId = generateId('sp');
+        const mesures = (entrante.mesures ?? []).map((m) => ({
+          ...m,
+          id: generateId('mes'),
+          sousPlacetteId,
+          createdAt: m.createdAt || nowIso(),
+        }));
+        const creee: SousPlacetteLocal = {
+          ...entrante,
+          id: sousPlacetteId,
+          placetteId: existante.id,
+          mesures,
+        };
+        sousPlacettes.push(creee);
+        await this.enqueue('SousPlacette', 'CREATE', creee.id, this.sousPlacettePayload(creee));
+        for (const m of mesures) {
+          await this.enqueue('MesureArbre', 'CREATE', m.id, this.mesurePayload(m));
+        }
+        continue;
+      }
+
+      // Sous-placette conservée → mise à jour, puis diff de ses mesures.
+      const mesures = await this.diffMesures(ancienne, entrante.mesures ?? []);
+      const majSP: SousPlacetteLocal = {
+        ...ancienne,
+        nombrePlantsCacao: entrante.nombrePlantsCacao,
+        nombreArbres: entrante.nombreArbres,
+        sommets: entrante.sommets,
+        mesures,
+      };
+      sousPlacettes.push(majSP);
+      await this.enqueue('SousPlacette', 'UPDATE', majSP.id, {
+        ...this.sousPlacettePayload(majSP),
+        serverId: majSP.serverId,
+      });
+    }
+
+    // Sous-placettes retirées de la fiche → suppression côté serveur aussi.
+    for (const ancienne of existante.sousPlacettes) {
+      if (numerosEntrants.has(ancienne.numero)) continue;
+      await this.enqueue('SousPlacette', 'DELETE', ancienne.id, { serverId: ancienne.serverId });
+    }
+
+    const placette: PlacetteLocal = {
+      ...existante,
+      ...entrant,
+      id: existante.id,
+      parcelleId: existante.parcelleId,
+      serverId: existante.serverId,
+      // Le numéro définitif vient du serveur : une reprise ne le régénère pas.
+      numeroPlacette: existante.numeroPlacette,
+      sousPlacettes,
+      synced: false,
+      updatedAt: nowIso(),
+    };
+    await placetteRepository.save(placette);
+    await this.enqueue('Placette', 'UPDATE', placette.id, {
+      ...this.placettePayload(placette),
+      serverId: placette.serverId,
+    });
+  }
+
+  /**
+   * Apparie les mesures d'une sous-placette par identifiant local.
+   * Une mesure rechargée depuis le brouillon garde son id : elle est donc
+   * modifiée, pas recréée. Une mesure retirée par l'agent est supprimée.
+   */
+  private async diffMesures(
+    ancienne: SousPlacetteLocal,
+    entrantes: MesureArbreLocal[],
+  ): Promise<MesureArbreLocal[]> {
+    const anciennesParId = new Map(ancienne.mesures.map((m) => [m.id, m]));
+    const idsEntrants = new Set(entrantes.map((m) => m.id).filter(Boolean));
+    const resultat: MesureArbreLocal[] = [];
+
+    for (const entrante of entrantes) {
+      const existante = entrante.id ? anciennesParId.get(entrante.id) : undefined;
+      if (existante) {
+        const maj: MesureArbreLocal = {
+          ...entrante,
+          id: existante.id,
+          serverId: existante.serverId,
+          sousPlacetteId: ancienne.id,
+          createdAt: existante.createdAt,
+        };
+        resultat.push(maj);
+        await this.enqueue('MesureArbre', 'UPDATE', maj.id, {
+          ...this.mesurePayload(maj),
+          serverId: maj.serverId,
+        });
+      } else {
+        const creee: MesureArbreLocal = {
+          ...entrante,
+          id: generateId('mes'),
+          serverId: undefined,
+          sousPlacetteId: ancienne.id,
+          createdAt: entrante.createdAt || nowIso(),
+        };
+        resultat.push(creee);
+        await this.enqueue('MesureArbre', 'CREATE', creee.id, this.mesurePayload(creee));
+      }
+    }
+
+    for (const m of ancienne.mesures) {
+      if (!idsEntrants.has(m.id)) {
+        await this.enqueue('MesureArbre', 'DELETE', m.id, { serverId: m.serverId });
+      }
+    }
+
+    return resultat;
+  }
+
   // ==========================================================================
   // Support SyncManager : marquage synchronisé + statistiques
   // ==========================================================================
@@ -217,10 +402,48 @@ class OfflineStorageService {
         if (p) await placetteRepository.save({ ...p, synced: true, serverId: serverId ?? p.serverId });
         break;
       }
-      // SousPlacette / MesureArbre / Photo sont imbriqués dans la placette :
-      // leur état synchronisé est porté par la placette parente.
+      // Sous-placettes et mesures sont imbriquées dans la placette : leur état
+      // « synchronisé » est porté par la parente, mais leur serverId doit être
+      // conservé individuellement — sans lui, une correction ultérieure ne
+      // pourrait que recréer au lieu de modifier.
+      case 'SousPlacette':
+      case 'MesureArbre': {
+        if (!serverId) break;
+        await this.appliquerServerIdImbrique(entity, localId, serverId);
+        break;
+      }
       default:
         break;
+    }
+  }
+
+  /** Écrit le serverId d'une sous-placette ou d'une mesure dans sa placette. */
+  private async appliquerServerIdImbrique(
+    entity: 'SousPlacette' | 'MesureArbre',
+    localId: string,
+    serverId: string,
+  ): Promise<void> {
+    const placettes = await placetteRepository.findAll();
+    for (const plc of placettes) {
+      let touche = false;
+      const sousPlacettes = plc.sousPlacettes.map((sp) => {
+        if (entity === 'SousPlacette' && sp.id === localId) {
+          touche = true;
+          return { ...sp, serverId };
+        }
+        if (entity === 'MesureArbre' && sp.mesures.some((m) => m.id === localId)) {
+          touche = true;
+          return {
+            ...sp,
+            mesures: sp.mesures.map((m) => (m.id === localId ? { ...m, serverId } : m)),
+          };
+        }
+        return sp;
+      });
+      if (touche) {
+        await placetteRepository.save({ ...plc, sousPlacettes });
+        return;
+      }
     }
   }
 
@@ -287,50 +510,68 @@ class OfflineStorageService {
 
   /** Met en file la placette et son arbre (sous-placettes + mesures) dans l'ordre de dépendance. */
   private async enqueuePlacetteTree(placette: PlacetteLocal): Promise<void> {
-    await this.enqueue('Placette', 'CREATE', placette.id, {
-      parcelleId: placette.parcelleId,
-      numeroPlacette: placette.numeroPlacette,
-      delegationRegionale: placette.delegationRegionale,
-      delegationId: placette.delegationId,
-      villeId: placette.villeId,
-      ville: placette.ville,
-      village: placette.village,
-      zoneCadastrale: placette.zoneCadastrale,
-      typologiePreIdentifiee: placette.typologiePreIdentifiee,
-      chefEquipe: placette.chefEquipe,
-      dateInventaire: placette.dateInventaire,
-      sommets: placette.sommets,
-    });
+    await this.enqueue('Placette', 'CREATE', placette.id, this.placettePayload(placette));
 
     for (const sp of placette.sousPlacettes) {
-      await this.enqueue('SousPlacette', 'CREATE', sp.id, {
-        placetteId: sp.placetteId,
-        numero: sp.numero,
-        nombrePlantsCacao: sp.nombrePlantsCacao,
-        nombreArbres: sp.nombreArbres,
-        sommets: sp.sommets,
-      });
+      await this.enqueue('SousPlacette', 'CREATE', sp.id, this.sousPlacettePayload(sp));
       for (const mesure of sp.mesures) {
-        await this.enqueue('MesureArbre', 'CREATE', mesure.id, {
-          sousPlacetteId: mesure.sousPlacetteId,
-          typeSujet: mesure.typeSujet,
-          espece: mesure.espece,
-          especeId: mesure.especeId,
-          especeLibre: mesure.especeLibre,
-          emetOmbre: mesure.emetOmbre,
-          estMature: mesure.estMature,
-          circonference30cm: mesure.circonference30cm,
-          circonferenceDBH: mesure.circonferenceDBH,
-          hauteurFut: mesure.hauteurFut,
-          hauteurTotale: mesure.hauteurTotale,
-          etatSanitaire: mesure.etatSanitaire,
-          precisionEtat: mesure.precisionEtat,
-          maladieId: mesure.maladieId,
-          maladieLibre: mesure.maladieLibre,
-          photoMaladie: mesure.photoMaladie,
-        });
+        await this.enqueue('MesureArbre', 'CREATE', mesure.id, this.mesurePayload(mesure));
       }
     }
+  }
+
+  /**
+   * ⚠️ Ces trois constructeurs sont des listes blanches partagées par la création
+   * ET la modification : un champ absent ici n'atteint jamais le backend, même
+   * correctement saisi et persisté localement. Tout nouveau champ doit y être
+   * ajouté en même temps que dans le type local correspondant.
+   */
+  private placettePayload(p: PlacetteLocal): Record<string, unknown> {
+    return {
+      parcelleId: p.parcelleId,
+      numeroPlacette: p.numeroPlacette,
+      delegationRegionale: p.delegationRegionale,
+      delegationId: p.delegationId,
+      villeId: p.villeId,
+      ville: p.ville,
+      village: p.village,
+      zoneCadastrale: p.zoneCadastrale,
+      typologiePreIdentifiee: p.typologiePreIdentifiee,
+      chefEquipe: p.chefEquipe,
+      dateInventaire: p.dateInventaire,
+      sommets: p.sommets,
+    };
+  }
+
+  private sousPlacettePayload(sp: SousPlacetteLocal): Record<string, unknown> {
+    return {
+      placetteId: sp.placetteId,
+      numero: sp.numero,
+      nombrePlantsCacao: sp.nombrePlantsCacao,
+      nombreArbres: sp.nombreArbres,
+      sommets: sp.sommets,
+    };
+  }
+
+  private mesurePayload(m: MesureArbreLocal): Record<string, unknown> {
+    return {
+      sousPlacetteId: m.sousPlacetteId,
+      typeSujet: m.typeSujet,
+      espece: m.espece,
+      especeId: m.especeId,
+      especeLibre: m.especeLibre,
+      emetOmbre: m.emetOmbre,
+      estMature: m.estMature,
+      circonference30cm: m.circonference30cm,
+      circonferenceDBH: m.circonferenceDBH,
+      hauteurFut: m.hauteurFut,
+      hauteurTotale: m.hauteurTotale,
+      etatSanitaire: m.etatSanitaire,
+      precisionEtat: m.precisionEtat,
+      maladieId: m.maladieId,
+      maladieLibre: m.maladieLibre,
+      photoMaladie: m.photoMaladie,
+    };
   }
 
   private producteurPayload(p: ProducteurLocal): Record<string, unknown> {

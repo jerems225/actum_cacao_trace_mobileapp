@@ -170,8 +170,9 @@ class SyncManager {
     pendingLocalIds: Set<string>,
   ): boolean {
     if (record.status === 'ERROR') return false; // Conflit déjà tranché ce cycle.
-    if (record.action === 'UPDATE') {
-      // UPDATE nécessite un serverId (dans le payload ou résolu via le map).
+    if (record.action === 'UPDATE' || record.action === 'DELETE') {
+      // Modifier ou supprimer exige de savoir QUOI côté serveur : le serverId
+      // vient du payload, ou du map construit à partir des entités déjà envoyées.
       const serverId = (record.payload.serverId as string) || idMap.get(record.clientId);
       if (!serverId) return false;
     }
@@ -193,14 +194,18 @@ class SyncManager {
       const value = payload[field] as string | undefined;
       if (value && idMap.has(value)) payload[field] = idMap.get(value);
     }
-    if (record.action === 'UPDATE' && !payload.serverId) {
+    if ((record.action === 'UPDATE' || record.action === 'DELETE') && !payload.serverId) {
       const serverId = idMap.get(record.clientId);
       if (serverId) payload.serverId = serverId;
     }
     return payload;
   }
 
-  /** Construit la table id local → serverId à partir des entités déjà synchronisées. */
+  /**
+   * Construit la table id local → serverId à partir des entités déjà synchronisées.
+   * Inclut les sous-placettes et les mesures : sans elles, une correction de
+   * mesure repartirait en création au lieu de modifier l'existante.
+   */
   private async buildServerIdMap(): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     const [producteurs, parcelles, placettes] = await Promise.all([
@@ -210,6 +215,14 @@ class SyncManager {
     ]);
     for (const p of [...producteurs, ...parcelles, ...placettes]) {
       if (p.serverId) map.set(p.id, p.serverId);
+    }
+    for (const plc of placettes) {
+      for (const sp of plc.sousPlacettes) {
+        if (sp.serverId) map.set(sp.id, sp.serverId);
+        for (const mesure of sp.mesures) {
+          if (mesure.serverId) map.set(mesure.id, mesure.serverId);
+        }
+      }
     }
     return map;
   }

@@ -32,6 +32,27 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  /**
+   * Collecte en cours de reprise (identifiant local de la parcelle).
+   * Non nul = le wizard s'ouvre prérempli et enverra une modification.
+   */
+  const [collecteEnEdition, setCollecteEnEdition] = useState<string | null>(null);
+
+  /** Ouvre le wizard sur une collecte existante (reprise d'un brouillon). */
+  const ouvrirCollecteEnEdition = (parcelleId: string) => {
+    setCollecteEnEdition(parcelleId);
+    setActiveTab('collecte');
+  };
+
+  /**
+   * Changement d'onglet. Quitter « collecte » ou y revenir par la barre annule
+   * la reprise : sans cela, un appui sur « + » rouvrirait le brouillon précédent
+   * au lieu de démarrer une fiche neuve.
+   */
+  const changerOnglet = (tab: TabType) => {
+    setCollecteEnEdition(null);
+    setActiveTab(tab);
+  };
 
   // Initialise la persistance locale (SQLite/Web) avant tout affichage.
   useEffect(() => {
@@ -128,7 +149,7 @@ export default function App() {
   }
 
   const screenProps = {
-    onNavigate: setActiveTab,
+    onNavigate: changerOnglet,
     onProfilePress: () => setProfileModalVisible(true),
     onNotificationPress: () => setNotifModalVisible(true),
     unreadCount: unreadCount,
@@ -140,9 +161,18 @@ export default function App() {
       case 'home':
         return <HomeScreen {...screenProps} />;
       case 'enquetes':
-        return <EnquetesScreen {...screenProps} />;
+        return <EnquetesScreen {...screenProps} onEditCollecte={ouvrirCollecteEnEdition} />;
       case 'collecte':
-        return <CollecteWizardScreen {...screenProps} />;
+        return (
+          <CollecteWizardScreen
+            {...screenProps}
+            // La clé force un remontage à chaque changement de cible : sans elle,
+            // les états du wizard survivraient d'une fiche à l'autre.
+            key={collecteEnEdition ?? 'nouvelle'}
+            editParcelleId={collecteEnEdition}
+            onEditDone={() => setCollecteEnEdition(null)}
+          />
+        );
       case 'carte':
         return <CarteScreen {...screenProps} />;
       case 'sync':
@@ -158,7 +188,7 @@ export default function App() {
       {renderActiveScreen()}
       <FloatingTabBar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changerOnglet}
         pendingSyncCount={pendingSyncCount}
       />
       <ProfileModal
