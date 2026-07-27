@@ -63,7 +63,7 @@ import {
   sanitizeEntier,
   verifieBorne,
 } from '../utils/champs';
-import type { UserProfile } from '../services/auth';
+import { avatarAffichable, type UserProfile } from '../services/auth';
 import type {
   PointGPS,
   TabType,
@@ -884,7 +884,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         }
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
-        avatarUri={user?.avatarUri}
+        avatarUri={avatarAffichable(user)}
         onNewAction={() => {
           setCurrentStep(1);
           onNavigate('collecte');

@@ -15,7 +15,7 @@ import { SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
 import type { Responsive } from '../theme/responsive';
 import { offlineStorage } from '../services/storage';
-import type { UserProfile } from '../services/auth';
+import { avatarAffichable, type UserProfile } from '../services/auth';
 import type { ParcelleLocal, PlacetteLocal, TabType } from '../types';
 import { formatRole, StatutCollecte, STATUT_COLLECTE_LABELS } from '../types';
 
@@ -170,7 +170,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
         }
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
-        avatarUri={user?.avatarUri}
+        avatarUri={avatarAffichable(user)}
         onNewAction={onNavigate ? () => onNavigate('collecte') : undefined}
         onNotificationPress={onNotificationPress}
         onProfilePress={onProfilePress}

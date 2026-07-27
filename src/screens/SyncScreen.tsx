@@ -15,7 +15,7 @@ import { offlineStorage } from '../services/storage';
 import { ApiSyncService } from '../services/api';
 import { notificationService } from '../services/notification';
 import { toast } from '../components/common/Toast';
-import type { UserProfile } from '../services/auth';
+import { avatarAffichable, type UserProfile } from '../services/auth';
 import type { ParcelleLocal, SyncHistoryEntry, TabType } from '../types';
 import { formatRole } from '../types';
 
@@ -100,7 +100,7 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
         }
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
-        avatarUri={user?.avatarUri}
+        avatarUri={avatarAffichable(user)}
         onNewAction={onNavigate ? () => onNavigate('collecte') : undefined}
         onNotificationPress={onNotificationPress}
         onProfilePress={onProfilePress}

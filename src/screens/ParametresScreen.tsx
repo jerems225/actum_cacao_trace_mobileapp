@@ -29,7 +29,7 @@ import { Header } from '../components/common/Header';
 import { toast } from '../components/common/Toast';
 import { useResponsive, useTheme, type Palette } from '../theme';
 import type { Responsive } from '../theme/responsive';
-import { authService, type UserProfile } from '../services/auth';
+import { authService, avatarAffichable, type UserProfile } from '../services/auth';
 import { apiClient, type ActivityEntry } from '../services/apiClient';
 import { ApiSyncService } from '../services/api';
 import { HttpError } from '../services/http';
@@ -134,7 +134,9 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
   const [zone, setZone] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
+  // Deux valeurs, deux rôles : ce qu'on affiche, ce qu'on conserve. Voir
+  // `avatarAffichable` dans services/auth.
+  const [avatarAffiche, setAvatarAffiche] = useState<string | undefined>(undefined);
   const [enregistrementProfil, setEnregistrementProfil] = useState(false);
 
   // --- Sécurité ---
@@ -189,7 +191,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
     setEmail(u.email ?? '');
     setTelephone(u.telephone ?? '');
     setZone(u.zoneAffectation ?? '');
-    setAvatarUri(u.avatarUri);
+    setAvatarAffiche(avatarAffichable(u));
   };
 
   const chargerDonnees = useCallback(async () => {
@@ -251,20 +253,22 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
       });
       if (resultat.canceled || !resultat.assets?.length) return;
 
-      // Affichage immédiat avec le fichier local, puis remplacement par l'URL
-      // distante une fois l'envoi fait : l'agent voit sa photo tout de suite,
-      // même si le réseau met du temps (ou échoue).
+      // Affichage immédiat avec le fichier local, l'envoi suit : l'agent voit sa
+      // photo tout de suite, même si le réseau met du temps ou échoue.
       const uriLocale = resultat.assets[0].uri;
-      setAvatarUri(uriLocale);
+      setAvatarAffiche(uriLocale);
       let miseAJour = await authService.updateProfile({ avatarUri: uriLocale });
       if (miseAJour) onProfileUpdated?.(miseAJour);
 
       const envoi = await ApiSyncService.uploadImageToSupabase(uriLocale, 'avatars');
-      if (envoi.url) {
-        setAvatarUri(envoi.url);
-        miseAJour = await authService.updateProfile({ avatarUri: envoi.url });
+      // On enregistre la RÉFÉRENCE renvoyée par le serveur, et on affiche le
+      // lien signé. Enregistrer le lien reviendrait à stocker une adresse qui
+      // expire dans l'heure.
+      if (envoi.reference) {
+        miseAJour = await authService.updateProfile({ avatarUri: envoi.reference });
         if (miseAJour) onProfileUpdated?.(miseAJour);
       }
+      if (envoi.url) setAvatarAffiche(envoi.url);
     } catch {
       toast.error('Impossible de charger cette image.');
     }
@@ -395,8 +399,8 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
               <TouchableOpacity onPress={choisirAvatar} activeOpacity={0.85}>
                 <Image
                   source={
-                    avatarUri
-                      ? { uri: avatarUri }
+                    avatarAffiche
+                      ? { uri: avatarAffiche }
                       : require('../../assets/images/agent_avatar.png')
                   }
                   style={styles.avatar}
@@ -632,7 +636,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
             ? `${formatRole(profil.role)}${profil.zoneAffectation ? ` • ${profil.zoneAffectation}` : ''}`
             : undefined
         }
-        avatarUri={profil?.avatarUri}
+        avatarUri={avatarAffichable(profil)}
         onNewAction={() => onNavigate?.('collecte')}
         onNotificationPress={onNotificationPress}
         onProfilePress={onProfilePress}

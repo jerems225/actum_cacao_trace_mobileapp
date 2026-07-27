@@ -12,7 +12,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme';
-import { authService, UserProfile } from '../../services/auth';
+import { authService, avatarAffichable, UserProfile } from '../../services/auth';
 import { ApiSyncService } from '../../services/api';
 import { formatRole } from '../../types';
 import { toast } from './Toast';
@@ -36,7 +36,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
   const [zone, setZone] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
+  // Ce qui est AFFICHÉ (lien signé ou photo locale), distinct de la référence
+  // durable conservée dans le profil. Voir `avatarAffichable`.
+  const [avatarAffiche, setAvatarAffiche] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (visible) {
@@ -53,7 +55,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       setEmail(u.email);
       setTelephone(u.telephone || '');
       setZone(u.zoneAffectation || '');
-      setAvatarUri(u.avatarUri);
+      setAvatarAffiche(avatarAffichable(u));
     }
   };
 
@@ -74,7 +76,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedUri = result.assets[0].uri;
-        setAvatarUri(selectedUri);
+        setAvatarAffiche(selectedUri);
 
         // Mettre à jour la session immédiatement pour un rendu instantané
         let updated = await authService.updateProfile({ avatarUri: selectedUri });
@@ -82,15 +84,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           onProfileUpdated(updated);
         }
 
-        // Envoi au backend Express ➔ Stockage dans le serveur/bucket Supabase
+        // Envoi au backend ➔ on conserve la RÉFÉRENCE renvoyée et on affiche le
+        // lien signé. Stocker le lien reviendrait à garder une adresse expirant
+        // dans l'heure, et l'avatar redeviendrait invisible tout seul.
         const uploadRes = await ApiSyncService.uploadImageToSupabase(selectedUri, 'avatars');
-        if (uploadRes.url) {
-          setAvatarUri(uploadRes.url);
-          updated = await authService.updateProfile({ avatarUri: uploadRes.url });
+        if (uploadRes.reference) {
+          updated = await authService.updateProfile({ avatarUri: uploadRes.reference });
           if (updated && onProfileUpdated) {
             onProfileUpdated(updated);
           }
         }
+        if (uploadRes.url) setAvatarAffiche(uploadRes.url);
       }
     } catch {
       toast.error('Impossible de charger l\'image.');
@@ -104,7 +108,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       email,
       telephone,
       zoneAffectation: zone,
-      avatarUri,
+      // Pas d'avatar ici : il est enregistré au moment de la sélection, avec sa
+      // référence. Le renvoyer depuis l'état d'affichage écraserait cette
+      // référence par un lien temporaire.
     });
     if (updated && onProfileUpdated) onProfileUpdated(updated);
     toast.success('Profil mis à jour avec succès.');
@@ -139,8 +145,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             {/* Section Photo de Profil avec Bouton d'édition Camera */}
             <View style={styles.avatarSection}>
               <View style={styles.avatarWrapper}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+                {avatarAffiche ? (
+                  <Image source={{ uri: avatarAffiche }} style={styles.avatarImg} />
                 ) : (
                   <Image
                     source={require('../../../assets/images/agent_avatar.png')}

@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { Header } from '../components/common/Header';
 import { colors, useResponsive } from '../theme';
 import { offlineStorage } from '../services/storage';
-import type { UserProfile } from '../services/auth';
+import { avatarAffichable, type UserProfile } from '../services/auth';
 import type { PlacetteLocal, TabType, PointGPS } from '../types';
 import { formatRole, TypePoint } from '../types';
 
@@ -62,7 +62,7 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
         subtitle="Visualisation géoréférencée des polygones de parcelles"
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
-        avatarUri={user?.avatarUri}
+        avatarUri={avatarAffichable(user)}
         onNewAction={onNavigate ? () => onNavigate('collecte') : undefined}
         onNotificationPress={onNotificationPress}
         onProfilePress={onProfilePress}

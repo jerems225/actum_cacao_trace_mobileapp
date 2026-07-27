@@ -23,10 +23,17 @@ export class ApiSyncService {
    * Téléverse une image vers le backend (qui la place dans Supabase Storage).
    * En cas d'échec/hors-ligne, retourne l'URI locale (l'image reste sur l'appareil).
    */
+  /**
+   * Téléverse une image et renvoie DEUX valeurs distinctes :
+   *  - `reference` : à conserver (durable, indépendante de l'hôte et du temps) ;
+   *  - `url` : à afficher (lien signé, expire au bout d'une heure).
+   * Les confondre, c'est enregistrer un lien mort ou afficher une référence
+   * qui ne pointe sur rien.
+   */
   static async uploadImageToSupabase(
     imageUri: string,
     category: 'avatars' | 'parcelles' = 'avatars',
-  ): Promise<{ success: boolean; url?: string; message?: string }> {
+  ): Promise<{ success: boolean; reference?: string; url?: string; message?: string }> {
     try {
       const authHeader = await this.getAuthHeader();
       if (!authHeader) {
@@ -55,8 +62,14 @@ export class ApiSyncService {
         const json = await res.json().catch(() => null);
         return {
           success: true,
+          reference: json?.data?.reference,
+          // Sans lien signé (repli disque du serveur), on continue d'afficher
+          // l'image locale : l'agent voit sa photo, la référence est conservée,
+          // et la réconciliation régularisera le fichier plus tard.
           url: json?.data?.url || imageUri,
-          message: 'Image téléversée avec succès.',
+          message: json?.data?.repliLocal
+            ? 'Image enregistrée sur le serveur, transfert vers le stockage en attente.'
+            : 'Image téléversée avec succès.',
         };
       }
       return { success: false, url: imageUri, message: 'Image conservée localement (envoi refusé par le serveur).' };

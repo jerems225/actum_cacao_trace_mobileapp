@@ -40,11 +40,41 @@ export interface UserProfile {
   role: 'ENQUETEUR' | 'CHEF_EQUIPE' | 'SUPERVISEUR' | 'ADMIN' | 'AGENT_TERRAIN';
   zoneAffectation: string;
   telephone?: string;
+  /**
+   * RÉFÉRENCE durable de l'avatar (`bucket/chemin`), ou une URI locale tant que
+   * la photo n'est pas partie au serveur. C'est cette valeur qu'on renvoie au
+   * backend — jamais un lien.
+   */
   avatarUri?: string;
+  /**
+   * LIEN d'affichage, signé par le serveur et TEMPORAIRE (1 h par défaut).
+   * À utiliser dans `<Image>`, jamais à renvoyer au backend ni à traiter comme
+   * une valeur durable : les buckets sont privés, un lien périmé ne montre plus
+   * rien.
+   */
+  avatarUrl?: string;
   codeAgent?: string; // identifiant terrain (CT-XXXX), présent pour les agents
   loginAt?: number; // horodatage du dernier login réussi (TTL de session 24 h)
   token?: string;
 }
+
+/** URI locale sur l'appareil : à garder en local, jamais à envoyer au serveur. */
+const estUriLocale = (v?: string) =>
+  !!v && /^(file:|content:|blob:|data:|ph:|assets-library:)/i.test(v);
+
+/**
+ * Ce qu'il faut donner à `<Image>` : le lien signé s'il existe, sinon la valeur
+ * brute (utile pour une photo prise à l'instant, pas encore téléversée).
+ * Une référence `bucket/chemin` seule n'est pas affichable — c'est voulu :
+ * mieux vaut l'avatar par défaut qu'une image brisée.
+ */
+export const avatarAffichable = (u?: UserProfile | null): string | undefined => {
+  if (u?.avatarUrl) return u.avatarUrl;
+  if (estUriLocale(u?.avatarUri) || /^https?:\/\//i.test(u?.avatarUri ?? '')) {
+    return u?.avatarUri;
+  }
+  return undefined;
+};
 
 /** Résultat d'une tentative de connexion agent terrain. */
 export interface AgentLoginResult {
@@ -112,6 +142,10 @@ class AuthService {
         zoneAffectation: server.zoneAffectation ?? current.zoneAffectation,
         telephone: server.telephone ?? current.telephone,
         avatarUri: server.avatarUri ?? current.avatarUri,
+        // Le lien signé est renouvelé à chaque lecture de profil : c'est le seul
+        // moment où on peut en obtenir un frais. Hors ligne, on garde l'ancien
+        // — périmé, il n'affichera rien, et l'avatar par défaut prendra le relais.
+        avatarUrl: server.avatarUrl ?? current.avatarUrl,
         token: current.token, // le jeton n'est jamais renvoyé par /me
       };
       this.currentUser = merged;
@@ -137,6 +171,7 @@ class AuthService {
         zoneAffectation: data.user.zoneAffectation || '',
         telephone: data.user.telephone || undefined,
         avatarUri: data.user.avatarUri || undefined,
+        avatarUrl: data.user.avatarUrl || undefined,
         loginAt: Date.now(),
         token: data.token,
       };
@@ -192,6 +227,7 @@ class AuthService {
         zoneAffectation: data.user.zoneAffectation || '',
         telephone: data.user.telephone || undefined,
         avatarUri: data.user.avatarUri || undefined,
+        avatarUrl: data.user.avatarUrl || undefined,
         codeAgent: data.user.codeAgent || normCode(codeAgent),
         loginAt: Date.now(),
         token: data.token,
@@ -294,7 +330,11 @@ class AuthService {
           email: updates.email,
           telephone: updates.telephone,
           zoneAffectation: updates.zoneAffectation,
-          avatarUri: updates.avatarUri,
+          // Une photo fraîchement prise porte une URI d'appareil
+          // (`file://…`) : elle n'a aucun sens pour le serveur, qui
+          // l'enregistrerait comme un chemin mort. On la garde en local et on
+          // n'envoie la référence qu'après le téléversement.
+          avatarUri: estUriLocale(updates.avatarUri) ? undefined : updates.avatarUri,
         });
         this.currentUser = {
           ...this.currentUser,
@@ -304,6 +344,7 @@ class AuthService {
           telephone: server.telephone ?? this.currentUser.telephone,
           zoneAffectation: server.zoneAffectation ?? this.currentUser.zoneAffectation,
           avatarUri: server.avatarUri ?? this.currentUser.avatarUri,
+          avatarUrl: server.avatarUrl ?? this.currentUser.avatarUrl,
         };
         await sessionRepository.saveSession(this.currentUser);
       } catch {

@@ -61,7 +61,10 @@ interface LoginResponse {
     prenoms?: string;
     role?: UserProfile['role'];
     zoneAffectation?: string;
+    /** Référence durable (`bucket/chemin`). */
     avatarUri?: string;
+    /** Lien signé temporaire, pour affichage seulement. */
+    avatarUrl?: string;
     telephone?: string;
   };
 }

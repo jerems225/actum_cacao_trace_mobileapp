@@ -13,7 +13,7 @@ import { ProducteurTipCard } from '../components/dashboard/ProducteurTipCard';
 import { SkeletonCard, SkeletonMetric, SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
 import { offlineStorage } from '../services/storage';
-import type { UserProfile } from '../services/auth';
+import { avatarAffichable, type UserProfile } from '../services/auth';
 import type { TabType, ParcelleLocal } from '../types';
 import { formatRole } from '../types';
 
@@ -74,7 +74,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         subtitle="Vous contrôlez la Traçabilité & l'Inventaire"
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
-        avatarUri={user?.avatarUri}
+        avatarUri={avatarAffichable(user)}
         onNewAction={() => onNavigate('collecte')}
         onNotificationPress={onNotificationPress}
         onProfilePress={onProfilePress}
