@@ -8,7 +8,7 @@ import {
   Switch,
   Image,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Header } from '../components/common/Header';
@@ -969,7 +969,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                       activeOpacity={0.8}
                     >
                       {active && (
-                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                       )}
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>
                         {opt.label}
@@ -996,7 +996,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                       activeOpacity={0.8}
                     >
                       {active && (
-                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                       )}
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>
                         {TRANCHE_AGE_LABELS[t]}
@@ -1089,7 +1089,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                       activeOpacity={0.8}
                     >
                       {active && (
-                        <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                        <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                       )}
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>
                         {PRATIQUE_RETENUE_LABELS[p]}
@@ -1166,8 +1166,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                         >
                           {/* Pastille d'état : plein = complet, creux = entamé,
                               rien = pas encore touché. */}
-                          <Feather
-                            name={complet ? 'check-circle' : entame ? 'circle' : 'minus-circle'}
+                          <Ionicons
+                            name={complet ? 'checkmark-circle-outline' : entame ? 'ellipse-outline' : 'remove-circle-outline'}
                             size={13}
                             color={
                               active
@@ -1189,7 +1189,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 {/* Bandeau d'identité : la question « je remplis quoi ? » ne doit
                     jamais se poser, même après un défilement. */}
                 <View style={styles.voletBandeau}>
-                  <Feather name="clipboard" size={14} color={colors.emeraldPrimary} />
+                  <Ionicons name="clipboard-outline" size={14} color={colors.emeraldPrimary} />
                   <Text style={styles.voletBandeauTexte}>
                     {PRATIQUE_RETENUE_LABELS[voletCourant].toUpperCase()}
                   </Text>
@@ -1213,7 +1213,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         {active && (
-                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                          <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                         )}
                         <Text style={[styles.chipText, active && styles.chipTextActive]}>
                           {t.label}
@@ -1245,7 +1245,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         {active && (
-                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                          <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                         )}
                         <Text style={[styles.chipText, active && styles.chipTextActive]}>
                           {AGENT_PRATIQUANT_LABELS[a]}
@@ -1283,7 +1283,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         {active && (
-                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                          <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                         )}
                         <Text style={[styles.chipText, active && styles.chipTextActive]}>
                           {FREQUENCE_PRATIQUE_LABELS[f]}
@@ -1362,7 +1362,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 </View>
                 {delegations.length === 0 ? (
                   <View style={styles.emptyRef}>
-                    <Feather name="wifi-off" size={14} color={colors.textSecondary} />
+                    <Ionicons name="cloud-offline-outline" size={14} color={colors.textSecondary} />
                     <Text style={styles.emptyRefText}>
                       Référentiel indisponible — connectez-vous une première fois.
                     </Text>
@@ -1382,7 +1382,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                           activeOpacity={0.8}
                         >
                           {active && (
-                            <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                            <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                           )}
                           <Text style={[styles.chipText, active && styles.chipTextActive]}>
                             {d.nom}
@@ -1414,7 +1414,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                           activeOpacity={0.8}
                         >
                           {active && (
-                            <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                            <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                           )}
                           <Text style={[styles.chipText, active && styles.chipTextActive]}>
                             {v.nom}
@@ -1460,7 +1460,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
               <View style={styles.dateRow}>
                 <View style={styles.dateIcon}>
-                  <Feather name="calendar" size={15} color={colors.emeraldPrimary} />
+                  <Ionicons name="calendar-outline" size={15} color={colors.emeraldPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.dateLabel}>Date de collecte</Text>
@@ -1480,7 +1480,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               >
                 <View style={styles.numeroTop}>
                   <View style={styles.numeroIcon}>
-                    <Feather name="hash" size={15} color="#FFFFFF" />
+                    <Ionicons name="keypad-outline" size={15} color="#FFFFFF" />
                   </View>
                   <Text style={styles.numeroCardLabel}>Numéro de placette</Text>
                   {numeroApercu && (
@@ -1566,7 +1566,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   })
                 }
               >
-                <Feather name="box" size={14} color={isCacao ? '#FFF' : colors.textPrimary} />
+                <Ionicons name="cube-outline" size={14} color={isCacao ? '#FFF' : colors.textPrimary} />
                 <Text style={[styles.typeBtnText, isCacao && styles.typeBtnTextActive]}>
                   Cacaoyer
                 </Text>
@@ -1588,7 +1588,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   })
                 }
               >
-                <Feather name="sun" size={14} color={!isCacao ? '#FFF' : colors.textPrimary} />
+                <Ionicons name="sunny-outline" size={14} color={!isCacao ? '#FFF' : colors.textPrimary} />
                 <Text style={[styles.typeBtnText, !isCacao && styles.typeBtnTextActive]}>
                   Arbre d'ombrage
                 </Text>
@@ -1699,7 +1699,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                         activeOpacity={0.8}
                       >
                         {active && (
-                          <Feather name="check" size={13} color="#FFFFFF" style={styles.chipCheck} />
+                          <Ionicons name="checkmark-outline" size={13} color="#FFFFFF" style={styles.chipCheck} />
                         )}
                         <Text style={[styles.chipText, active && styles.chipTextActive]}>
                           {ETAT_SANITAIRE_LABELS[et]}
@@ -1745,13 +1745,13 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   <View style={styles.photoRow}>
                     <Image source={{ uri: draft.photoMaladie }} style={styles.photoThumb} />
                     <TouchableOpacity style={styles.photoRetake} onPress={handleCapturePhotoMaladie}>
-                      <Feather name="refresh-cw" size={14} color={colors.emeraldPrimary} />
+                      <Ionicons name="refresh-outline" size={14} color={colors.emeraldPrimary} />
                       <Text style={styles.photoRetakeText}>Reprendre</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <TouchableOpacity style={styles.photoBtn} onPress={handleCapturePhotoMaladie}>
-                    <Feather name="camera" size={16} color={colors.emeraldPrimary} />
+                    <Ionicons name="camera-outline" size={16} color={colors.emeraldPrimary} />
                     <Text style={styles.photoBtnText}>Ajouter la photo (obligatoire)</Text>
                   </TouchableOpacity>
                 )}
@@ -1759,7 +1759,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             )}
 
             <TouchableOpacity style={styles.addMesureBtn} onPress={handleAddMesure}>
-              <Feather name="plus-circle" size={16} color={colors.emeraldPrimary} />
+              <Ionicons name="add-circle-outline" size={16} color={colors.emeraldPrimary} />
               <Text style={styles.addMesureText}>
                 Ajouter {isCacao ? 'ce cacaoyer' : 'cet arbre'} à SP{selectedSP}
               </Text>
@@ -1800,8 +1800,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 </Text>
                 {mesuresPourSP.map((m, i) => (
                   <View key={i} style={styles.mesureChip}>
-                    <Feather
-                      name={m.typeSujet === TypeSujet.CACAO ? 'box' : 'sun'}
+                    <Ionicons
+                      name={m.typeSujet === TypeSujet.CACAO ? 'cube-outline' : 'sunny-outline'}
                       size={12}
                       color={colors.emeraldPrimary}
                     />
@@ -1822,7 +1822,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* Message d'erreur de validation (visible web + natif) */}
         {errorMsg && (
           <View style={styles.errorBox}>
-            <Feather name="alert-circle" size={16} color={colors.error} />
+            <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         )}
@@ -1841,7 +1841,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
             {manquants.length === 0 ? (
               <View style={styles.completeBox}>
-                <Feather name="check-circle" size={18} color={colors.emeraldPrimary} />
+                <Ionicons name="checkmark-circle-outline" size={18} color={colors.emeraldPrimary} />
                 <Text style={styles.completeTexte}>
                   Toutes les informations requises sont renseignées.
                 </Text>
@@ -1849,7 +1849,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
             ) : (
               <View style={styles.manquantsBox}>
                 <View style={styles.manquantsHead}>
-                  <Feather name="alert-triangle" size={15} color={colors.warning} />
+                  <Ionicons name="warning-outline" size={15} color={colors.warning} />
                   <Text style={styles.manquantsTitre}>
                     {manquants.length} information{manquants.length > 1 ? 's' : ''} requise
                     {manquants.length > 1 ? 's' : ''} manquante{manquants.length > 1 ? 's' : ''}
@@ -1873,7 +1873,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 onPress={() => handleSave(StatutCollecte.BROUILLON)}
                 disabled={saving}
               >
-                <Feather name="save" size={17} color={colors.textPrimary} />
+                <Ionicons name="save-outline" size={17} color={colors.textPrimary} />
                 <Text style={styles.draftBtnText}>
                   {saving ? 'Enregistrement…' : 'Enregistrer en brouillon'}
                 </Text>
@@ -1887,7 +1887,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 onPress={() => handleSave(StatutCollecte.SOUMISE)}
                 disabled={saving}
               >
-                <Feather name="check" size={18} color={colors.textLight} />
+                <Ionicons name="checkmark-outline" size={18} color={colors.textLight} />
                 <Text style={styles.saveBtnText}>
                   {saving
                     ? 'Enregistrement…'
@@ -1911,7 +1911,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               style={styles.prevBtn}
               onPress={() => setCurrentStep((prev) => (prev - 1) as never)}
             >
-              <Feather name="arrow-left" size={18} color={colors.textPrimary} />
+              <Ionicons name="arrow-back-outline" size={18} color={colors.textPrimary} />
               <Text style={styles.prevBtnText}>Précédent</Text>
             </TouchableOpacity>
           )}
@@ -1921,7 +1921,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               <Text style={styles.nextBtnText}>
                 {currentStep === DERNIERE_ETAPE - 1 ? 'Valider la collecte' : 'Étape suivante'}
               </Text>
-              <Feather name="arrow-right" size={18} color={colors.textLight} />
+              <Ionicons name="arrow-forward-outline" size={18} color={colors.textLight} />
             </TouchableOpacity>
           )}
         </View>

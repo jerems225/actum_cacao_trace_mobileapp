@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme';
 import type { AppNotification } from '../../services/notification';
 
@@ -34,13 +34,13 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const getIcon = (type: AppNotification['type']) => {
     switch (type) {
       case 'COLLECTE':
-        return { name: 'check-circle' as const, color: colors.emeraldPrimary, bg: colors.mintBadge };
+        return { name: 'checkmark-circle-outline' as const, color: colors.emeraldPrimary, bg: colors.mintBadge };
       case 'SYNC':
-        return { name: 'refresh-cw' as const, color: '#0288D1', bg: '#E1F5FE' };
+        return { name: 'refresh-outline' as const, color: '#0288D1', bg: '#E1F5FE' };
       case 'SANITARY_ALERT':
-        return { name: 'alert-triangle' as const, color: colors.warning, bg: colors.warningBg };
+        return { name: 'warning-outline' as const, color: colors.warning, bg: colors.warningBg };
       default:
-        return { name: 'bell' as const, color: colors.textPrimary, bg: colors.backgroundLight };
+        return { name: 'notifications-outline' as const, color: colors.textPrimary, bg: colors.backgroundLight };
     }
   };
 
@@ -55,12 +55,12 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <Feather name="bell" size={20} color={colors.textPrimary} />
+              <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
               <Text style={styles.title}>Centre de Notifications</Text>
             </View>
 
             <TouchableOpacity onPress={onClose}>
-              <Feather name="x" size={22} color={colors.textPrimary} />
+              <Ionicons name="close-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -80,7 +80,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
             {notifications.length === 0 ? (
               <View style={styles.emptyBox}>
-                <Feather name="check-circle" size={32} color={colors.emeraldPrimary} />
+                <Ionicons name="checkmark-circle-outline" size={32} color={colors.emeraldPrimary} />
                 <Text style={styles.emptyTitle}>Aucune Notification</Text>
                 <Text style={styles.emptySub}>
                   Vous êtes au courant de toutes les activités terrain.
@@ -99,7 +99,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                     accessibilityRole="button"
                   >
                     <View style={[styles.iconBox, { backgroundColor: iconInfo.bg }]}>
-                      <Feather name={iconInfo.name} size={18} color={iconInfo.color} />
+                      <Ionicons name={iconInfo.name} size={18} color={iconInfo.color} />
                     </View>
 
                     <View style={{ flex: 1 }}>
@@ -119,7 +119,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                           promettre une navigation qui n'existe pas est pire que
                           de ne rien promettre. */}
                       {ouvrable && (
-                        <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                        <Ionicons name="chevron-forward-outline" size={16} color={colors.textMuted} />
                       )}
                     </View>
                   </TouchableOpacity>

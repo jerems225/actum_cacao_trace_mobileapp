@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, useResponsive } from '../theme';
 import { authService, UserProfile } from '../services/auth';
@@ -144,7 +144,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const renderError = () =>
     errorMsg ? (
       <View style={styles.errorBox}>
-        <Feather name="alert-circle" size={16} color={colors.error} />
+        <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
         <Text style={styles.errorBoxText}>{errorMsg}</Text>
       </View>
     ) : null;
@@ -195,7 +195,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Code agent</Text>
               <View style={styles.inputWrapper}>
-                <Feather name="hash" size={16} color={colors.textSecondary} />
+                <Ionicons name="keypad-outline" size={16} color={colors.textSecondary} />
                 <TextInput
                   style={styles.textInput}
                   keyboardType="number-pad"
@@ -222,7 +222,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               ) : (
                 <>
                   <Text style={styles.loginBtnText}>Continuer</Text>
-                  <Feather name="arrow-right" size={18} color="#FFF" />
+                  <Ionicons name="arrow-forward-outline" size={18} color="#FFF" />
                 </>
               )}
             </TouchableOpacity>
@@ -288,7 +288,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   ) : (
                     <>
                       <Text style={styles.loginBtnText}>Créer et me connecter</Text>
-                      <Feather name="arrow-right" size={18} color="#FFF" />
+                      <Ionicons name="arrow-forward-outline" size={18} color="#FFF" />
                     </>
                   )}
                 </TouchableOpacity>
@@ -296,7 +296,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             )}
 
             <TouchableOpacity style={styles.linkBtn} onPress={backToIdentifiant} disabled={loading}>
-              <Feather name="arrow-left" size={14} color={colors.textSecondary} />
+              <Ionicons name="arrow-back-outline" size={14} color={colors.textSecondary} />
               <Text style={styles.linkText}>Changer de code agent</Text>
             </TouchableOpacity>
           </View>

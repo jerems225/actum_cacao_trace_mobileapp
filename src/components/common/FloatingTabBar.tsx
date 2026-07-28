@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useResponsive, useTheme } from '../../theme';
 import type { TabType } from '../../types';
 
@@ -21,12 +21,12 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({
   // L'onglet carte a été retiré du menu. L'écran existe toujours
   // (`CarteScreen`) mais n'est plus atteignable depuis la barre : la cartographie
   // relève de la restitution, côté administration, pas de la saisie terrain.
-  const tabs: Array<{ id: TabType; label: string; icon: keyof typeof Feather.glyphMap }> = [
-    { id: 'home', label: 'Accueil', icon: 'grid' },
-    { id: 'enquetes', label: 'Collectes', icon: 'layers' },
-    { id: 'collecte', label: 'Saisir', icon: 'plus-circle' },
-    { id: 'sync', label: 'Envoi', icon: 'upload-cloud' },
-    { id: 'parametres', label: 'Réglages', icon: 'sliders' },
+  const tabs: Array<{ id: TabType; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+    { id: 'home', label: 'Accueil', icon: 'grid-outline' },
+    { id: 'enquetes', label: 'Collectes', icon: 'layers-outline' },
+    { id: 'collecte', label: 'Saisir', icon: 'add-circle-outline' },
+    { id: 'sync', label: 'Envoi', icon: 'cloud-upload-outline' },
+    { id: 'parametres', label: 'Réglages', icon: 'options-outline' },
   ];
 
   return (
@@ -55,7 +55,7 @@ export const FloatingTabBar: React.FC<FloatingTabBarProps> = ({
               accessibilityLabel={tab.label}
             >
               <View style={styles.iconContainer}>
-                <Feather
+                <Ionicons
                   name={tab.icon}
                   size={20}
                   color={isActive ? palette.textLight : palette.textMuted}

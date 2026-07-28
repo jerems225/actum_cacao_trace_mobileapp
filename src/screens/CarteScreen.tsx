@@ -7,7 +7,7 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/common/Header';
 import { colors, useResponsive } from '../theme';
 import { offlineStorage } from '../services/storage';
@@ -97,13 +97,13 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
           {/* Calques & Contrôles SIG */}
           <View style={styles.mapControls}>
             <TouchableOpacity style={styles.mapControlBtn}>
-              <Feather name="layers" size={18} color={colors.forestDark} />
+              <Ionicons name="layers-outline" size={18} color={colors.forestDark} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.mapControlBtn}>
-              <Feather name="crosshair" size={18} color={colors.forestDark} />
+              <Ionicons name="locate-outline" size={18} color={colors.forestDark} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.mapControlBtn}>
-              <Feather name="zoom-in" size={18} color={colors.forestDark} />
+              <Ionicons name="scan-outline" size={18} color={colors.forestDark} />
             </TouchableOpacity>
           </View>
 
@@ -123,7 +123,7 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
             onPress={loadPlacettes}
             accessibilityLabel="Rafraîchir les placettes"
           >
-            <Feather name="refresh-cw" size={16} color={colors.emeraldPrimary} />
+            <Ionicons name="refresh-outline" size={16} color={colors.emeraldPrimary} />
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trayScroll}>
@@ -136,7 +136,7 @@ export const CarteScreen: React.FC<CarteScreenProps> = ({
               ]}
               onPress={() => setSelectedPlacette(plc)}
             >
-              <Feather name="shield" size={16} color={selectedPlacette?.id === plc.id ? colors.mintSoft : colors.emeraldPrimary} />
+              <Ionicons name="shield-checkmark-outline" size={16} color={selectedPlacette?.id === plc.id ? colors.mintSoft : colors.emeraldPrimary} />
               <View>
                 <Text style={[styles.trayCardTitle, selectedPlacette?.id === plc.id && styles.textLight]}>
                   {plc.numeroPlacette}

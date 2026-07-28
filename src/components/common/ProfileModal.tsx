@@ -9,7 +9,7 @@ import {
   Image,
   ScrollView,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme';
 import { authService, avatarAffichable, UserProfile } from '../../services/auth';
@@ -137,7 +137,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <View style={styles.header}>
             <Text style={styles.title}>Gestion du profil</Text>
             <TouchableOpacity onPress={onClose}>
-              <Feather name="x" size={22} color={colors.textPrimary} />
+              <Ionicons name="close-outline" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -154,13 +154,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   />
                 )}
                 <TouchableOpacity style={styles.cameraBtn} onPress={handlePickAvatar}>
-                  <Feather name="camera" size={14} color="#FFF" />
+                  <Ionicons name="camera-outline" size={14} color="#FFF" />
                 </TouchableOpacity>
               </View>
 
               <Text style={styles.userName}>{prenoms} {nom}</Text>
               <View style={styles.roleBadge}>
-                <Feather name="shield" size={12} color={colors.emeraldPrimary} />
+                <Ionicons name="shield-checkmark-outline" size={12} color={colors.emeraldPrimary} />
                 <Text style={styles.roleText}>{formatRole(user.role)}</Text>
               </View>
             </View>
@@ -215,12 +215,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
             {/* Boutons d'Action */}
             <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
-              <Feather name="check" size={18} color="#FFF" />
+              <Ionicons name="checkmark-outline" size={18} color="#FFF" />
               <Text style={styles.saveBtnText}>Enregistrer le Profil</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogoutPress}>
-              <Feather name="log-out" size={18} color={colors.error} />
+              <Ionicons name="log-out-outline" size={18} color={colors.error} />
               <Text style={styles.logoutBtnText}>Se Déconnecter</Text>
             </TouchableOpacity>
           </ScrollView>

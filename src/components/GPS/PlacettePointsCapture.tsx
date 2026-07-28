@@ -8,7 +8,7 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme';
 import { TypePoint } from '../../types';
 import type { PointGPS } from '../../types';
@@ -142,7 +142,7 @@ export const PlacettePointsCapture: React.FC<PlacettePointsCaptureProps> = ({
           <Text style={styles.progressLabel}>points relevés</Text>
         </View>
         <View style={styles.areaBadge}>
-          <Feather name="maximize" size={12} color={colors.emeraldPrimary} />
+          <Ionicons name="expand-outline" size={12} color={colors.emeraldPrimary} />
           <Text style={styles.areaText}>{areaInHectares > 0 ? `${areaInHectares} ha` : '— ha'}</Text>
         </View>
       </View>
@@ -158,12 +158,12 @@ export const PlacettePointsCapture: React.FC<PlacettePointsCaptureProps> = ({
           <ActivityIndicator color="#FFFFFF" />
         ) : next ? (
           <>
-            <Feather name="crosshair" size={18} color="#FFFFFF" />
+            <Ionicons name="locate-outline" size={18} color="#FFFFFF" />
             <Text style={styles.nextBtnText}>Capturer {next.label}</Text>
           </>
         ) : (
           <>
-            <Feather name="check-circle" size={18} color="#FFFFFF" />
+            <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
             <Text style={styles.nextBtnText}>Tous les points relevés</Text>
           </>
         )}
@@ -215,11 +215,11 @@ export const PlacettePointsCapture: React.FC<PlacettePointsCaptureProps> = ({
                               onPress={() => openEditor(g.type, ordre, `${g.prefix}${ordre}`, pt!)}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
-                              <Feather name="edit-2" size={13} color={colors.textSecondary} />
+                              <Ionicons name="create-outline" size={13} color={colors.textSecondary} />
                             </TouchableOpacity>
                           )}
-                          <Feather
-                            name={captured ? 'check-circle' : 'crosshair'}
+                          <Ionicons
+                            name={captured ? 'checkmark-circle-outline' : 'locate-outline'}
                             size={14}
                             color={captured ? colors.emeraldPrimary : colors.textMuted}
                           />
@@ -256,7 +256,7 @@ export const PlacettePointsCapture: React.FC<PlacettePointsCaptureProps> = ({
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHead}>
-              <Feather name="edit-2" size={16} color={colors.emeraldPrimary} />
+              <Ionicons name="create-outline" size={16} color={colors.emeraldPrimary} />
               <Text style={styles.modalTitle}>Corriger le point {editor?.label}</Text>
             </View>
             <Text style={styles.modalSub}>
@@ -320,7 +320,7 @@ export const PlacettePointsCapture: React.FC<PlacettePointsCaptureProps> = ({
                 <Text style={styles.modalCancelText}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSave} onPress={saveEditor}>
-                <Feather name="check" size={16} color="#FFFFFF" />
+                <Ionicons name="checkmark-outline" size={16} color="#FFFFFF" />
                 <Text style={styles.modalSaveText}>Enregistrer</Text>
               </TouchableOpacity>
             </View>

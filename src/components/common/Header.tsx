@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useResponsive, useTheme } from '../../theme';
 
 interface HeaderProps {
@@ -80,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
               onPress={onNewAction}
               activeOpacity={0.8}
             >
-              <Feather name="plus" size={18} color={palette.textLight} />
+              <Ionicons name="add-outline" size={18} color={palette.textLight} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
               onPress={onNotificationPress}
               activeOpacity={0.8}
             >
-              <Feather name="bell" size={18} color={palette.textPrimary} />
+              <Ionicons name="notifications-outline" size={18} color={palette.textPrimary} />
               {unreadCount > 0 && (
                 <View
                   style={[

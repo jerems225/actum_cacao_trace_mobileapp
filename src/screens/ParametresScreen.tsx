@@ -23,7 +23,7 @@ import {
   Switch,
   ActivityIndicator,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Header } from '../components/common/Header';
 import { toast } from '../components/common/Toast';
@@ -56,43 +56,43 @@ const RUBRIQUES: Array<{
   cle: Rubrique;
   titre: string;
   resume: string;
-  icone: keyof typeof Feather.glyphMap;
+  icone: keyof typeof Ionicons.glyphMap;
 }> = [
   {
     cle: 'compte',
     titre: 'Compte et profil',
     resume: 'Photo, nom, téléphone, zone d\'affectation',
-    icone: 'user',
+    icone: 'person-outline',
   },
   {
     cle: 'securite',
     titre: 'Sécurité',
     resume: 'Changer votre code d\'accès',
-    icone: 'lock',
+    icone: 'lock-closed-outline',
   },
   {
     cle: 'notifications',
     titre: 'Notifications',
     resume: 'Alertes affichées par le téléphone',
-    icone: 'bell',
+    icone: 'notifications-outline',
   },
   {
     cle: 'apparence',
     titre: 'Apparence',
     resume: 'Thème clair, sombre ou celui du système',
-    icone: 'moon',
+    icone: 'moon-outline',
   },
   {
     cle: 'donnees',
     titre: 'Données et stockage',
     resume: 'Ce que contient l\'appareil, mise à jour des listes',
-    icone: 'database',
+    icone: 'server-outline',
   },
   {
     cle: 'activite',
     titre: 'Activité du compte',
     resume: 'Connexions, envois et modifications récentes',
-    icone: 'activity',
+    icone: 'pulse-outline',
   },
 ];
 
@@ -406,7 +406,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
                   style={styles.avatar}
                 />
                 <View style={styles.avatarBouton}>
-                  <Feather name="camera" size={13} color={palette.textLight} />
+                  <Ionicons name="camera-outline" size={13} color={palette.textLight} />
                 </View>
               </TouchableOpacity>
               <View style={styles.avatarTexte}>
@@ -431,7 +431,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
               onPress={enregistrerProfil}
               disabled={enregistrementProfil}
             >
-              <Feather name="check" size={17} color={palette.textLight} />
+              <Ionicons name="checkmark-outline" size={17} color={palette.textLight} />
               <Text style={styles.boutonPrincipalTexte}>
                 {enregistrementProfil ? 'Enregistrement…' : 'Enregistrer'}
               </Text>
@@ -467,7 +467,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
               onPress={changerSecret}
               disabled={changementEnCours}
             >
-              <Feather name="shield" size={17} color={palette.textLight} />
+              <Ionicons name="shield-checkmark-outline" size={17} color={palette.textLight} />
               <Text style={styles.boutonPrincipalTexte}>
                 {changementEnCours ? 'Modification…' : `Changer mon ${libelleSecret}`}
               </Text>
@@ -553,7 +553,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
               onPress={rafraichirReferentiels}
               disabled={rafraichissement}
             >
-              <Feather name="refresh-cw" size={16} color={palette.textPrimary} />
+              <Ionicons name="refresh-outline" size={16} color={palette.textPrimary} />
               <Text style={styles.boutonSecondaireTexte}>
                 {rafraichissement ? 'Mise à jour…' : 'Mettre à jour les listes de référence'}
               </Text>
@@ -568,7 +568,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
                 style={styles.boutonSecondaire}
                 onPress={() => onNavigate?.('sync')}
               >
-                <Feather name="upload-cloud" size={16} color={palette.textPrimary} />
+                <Ionicons name="cloud-upload-outline" size={16} color={palette.textPrimary} />
                 <Text style={styles.boutonSecondaireTexte}>
                   Aller à l&apos;envoi ({stats.pendingSyncCount} en attente)
                 </Text>
@@ -588,7 +588,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
 
             {!activiteEnCours && activiteErreur && (
               <View style={styles.encadreAlerte}>
-                <Feather name="wifi-off" size={15} color={palette.warning} />
+                <Ionicons name="cloud-offline-outline" size={15} color={palette.warning} />
                 <Text style={styles.encadreAlerteTexte}>{activiteErreur}</Text>
               </View>
             )}
@@ -612,7 +612,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
               ))}
 
             <TouchableOpacity style={styles.boutonSecondaire} onPress={() => void chargerActivite()}>
-              <Feather name="refresh-cw" size={16} color={palette.textPrimary} />
+              <Ionicons name="refresh-outline" size={16} color={palette.textPrimary} />
               <Text style={styles.boutonSecondaireTexte}>Actualiser</Text>
             </TouchableOpacity>
             <Text style={styles.aide}>
@@ -659,14 +659,14 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
                 accessibilityRole="button"
               >
                 <View style={styles.icone}>
-                  <Feather name={r.icone} size={17} color={palette.emeraldPrimary} />
+                  <Ionicons name={r.icone} size={17} color={palette.emeraldPrimary} />
                 </View>
                 <View style={styles.enteteTexte}>
                   <Text style={styles.titre}>{r.titre}</Text>
                   <Text style={styles.resume}>{r.resume}</Text>
                 </View>
-                <Feather
-                  name={estOuverte ? 'chevron-up' : 'chevron-down'}
+                <Ionicons
+                  name={estOuverte ? 'chevron-up-outline' : 'chevron-down-outline'}
                   size={19}
                   color={palette.textMuted}
                 />
@@ -678,7 +678,7 @@ export const ParametresScreen: React.FC<ParametresScreenProps> = ({
         })}
 
         <TouchableOpacity style={styles.deconnexion} onPress={() => onLogout?.()}>
-          <Feather name="log-out" size={17} color={palette.error} />
+          <Ionicons name="log-out-outline" size={17} color={palette.error} />
           <Text style={styles.deconnexionTexte}>Se déconnecter</Text>
         </TouchableOpacity>
         <Text style={styles.aideCentre}>

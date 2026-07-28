@@ -9,7 +9,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Animated, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, useResponsive } from '../../theme';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -41,11 +41,11 @@ export const toast = {
 
 const CONFIG: Record<
   ToastType,
-  { icon: keyof typeof Feather.glyphMap; color: string; bg: string; border: string }
+  { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; border: string }
 > = {
-  success: { icon: 'check-circle', color: colors.emeraldPrimary, bg: '#ECFDF5', border: colors.emeraldPrimary },
-  error: { icon: 'alert-circle', color: colors.error, bg: colors.errorBg, border: colors.error },
-  info: { icon: 'info', color: colors.textPrimary, bg: '#FFFFFF', border: colors.borderLight },
+  success: { icon: 'checkmark-circle-outline', color: colors.emeraldPrimary, bg: '#ECFDF5', border: colors.emeraldPrimary },
+  error: { icon: 'alert-circle-outline', color: colors.error, bg: colors.errorBg, border: colors.error },
+  info: { icon: 'information-circle-outline', color: colors.textPrimary, bg: '#FFFFFF', border: colors.borderLight },
 };
 
 export const ToastHost: React.FC = () => {
@@ -91,12 +91,12 @@ export const ToastHost: React.FC = () => {
           { opacity, maxWidth: contentMaxWidth, backgroundColor: cfg.bg, borderColor: cfg.border },
         ]}
       >
-        <Feather name={cfg.icon} size={18} color={cfg.color} />
+        <Ionicons name={cfg.icon} size={18} color={cfg.color} />
         <Text style={[styles.text, { color: cfg.color }]} numberOfLines={3}>
           {current.message}
         </Text>
         <TouchableOpacity onPress={hide} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Feather name="x" size={16} color={cfg.color} />
+          <Ionicons name="close-outline" size={16} color={cfg.color} />
         </TouchableOpacity>
       </Animated.View>
     </View>

@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/common/Header';
 import { SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
@@ -142,7 +142,7 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
               <ActivityIndicator color={colors.textLight} />
             ) : (
               <>
-                <Feather name="upload-cloud" size={18} color={colors.textLight} />
+                <Ionicons name="cloud-upload-outline" size={18} color={colors.textLight} />
                 <Text style={styles.syncButtonText}>Envoyer maintenant</Text>
               </>
             )}
@@ -155,7 +155,7 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
           <SkeletonList count={3} />
         ) : collectesEnAttente.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Feather name="check-circle" size={32} color={colors.emeraldPrimary} />
+            <Ionicons name="checkmark-circle-outline" size={32} color={colors.emeraldPrimary} />
             <Text style={styles.emptyTitle}>Rien à envoyer</Text>
             <Text style={styles.emptySub}>
               Vos collectes sont en sécurité sur le serveur.
@@ -170,7 +170,7 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
               activeOpacity={0.8}
             >
               <View style={styles.queueIcon}>
-                <Feather name="clipboard" size={16} color={colors.emeraldPrimary} />
+                <Ionicons name="clipboard-outline" size={16} color={colors.emeraldPrimary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.queueEntity}>
@@ -195,8 +195,8 @@ export const SyncScreen: React.FC<SyncScreenProps> = ({
         ) : (
           syncHistory.map((h) => (
             <View key={h.id} style={styles.historyCard}>
-              <Feather
-                name={h.status === 'SUCCESS' ? 'check' : h.status === 'PARTIAL' ? 'alert-circle' : 'x'}
+              <Ionicons
+                name={h.status === 'SUCCESS' ? 'checkmark-outline' : h.status === 'PARTIAL' ? 'alert-circle-outline' : 'close-outline'}
                 size={16}
                 color={h.status === 'ERROR' ? colors.error : colors.emeraldPrimary}
               />

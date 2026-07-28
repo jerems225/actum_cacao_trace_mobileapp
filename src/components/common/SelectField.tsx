@@ -23,7 +23,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme';
 
 export interface SelectOption {
@@ -93,7 +93,7 @@ export const SelectField: React.FC<SelectFieldProps> = ({
         <Text style={[styles.valeur, !selection && styles.placeholder]} numberOfLines={1}>
           {selection ? selection.label : placeholder}
         </Text>
-        <Feather name="chevron-down" size={18} color={colors.textSecondary} />
+        <Ionicons name="chevron-down-outline" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
       <Modal visible={ouvert} transparent animationType="fade" onRequestClose={fermer}>
@@ -103,13 +103,13 @@ export const SelectField: React.FC<SelectFieldProps> = ({
             <View style={styles.entete}>
               <Text style={styles.titre}>{title}</Text>
               <TouchableOpacity onPress={fermer} hitSlop={10}>
-                <Feather name="x" size={20} color={colors.textSecondary} />
+                <Ionicons name="close-outline" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             {avecRecherche && (
               <View style={styles.rechercheBoite}>
-                <Feather name="search" size={15} color={colors.textMuted} />
+                <Ionicons name="search-outline" size={15} color={colors.textMuted} />
                 <TextInput
                   style={styles.rechercheInput}
                   placeholder="Rechercher…"
@@ -140,7 +140,7 @@ export const SelectField: React.FC<SelectFieldProps> = ({
                         </Text>
                         {o.hint ? <Text style={styles.ligneHint}>{o.hint}</Text> : null}
                       </View>
-                      {actif && <Feather name="check" size={17} color={colors.emeraldPrimary} />}
+                      {actif && <Ionicons name="checkmark-outline" size={17} color={colors.emeraldPrimary} />}
                     </TouchableOpacity>
                   );
                 })
@@ -155,7 +155,7 @@ export const SelectField: React.FC<SelectFieldProps> = ({
                   fermer();
                 }}
               >
-                <Feather name="rotate-ccw" size={14} color={colors.textSecondary} />
+                <Ionicons name="arrow-undo-outline" size={14} color={colors.textSecondary} />
                 <Text style={styles.effacerTexte}>Effacer la sélection</Text>
               </TouchableOpacity>
             )}

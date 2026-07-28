@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { AnimatedSplash } from './src/components/common/AnimatedSplash';
 import { FloatingTabBar } from './src/components/common/FloatingTabBar';
 import { ProfileModal } from './src/components/common/ProfileModal';
@@ -50,7 +50,7 @@ function Application() {
    * `erreurPolices` est traité comme « prêt » : mieux vaut une interface sans
    * icônes qu'un écran d'attente définitif si la police manque à l'appel.
    */
-  const [policesPretes, erreurPolices] = useFonts(Feather.font);
+  const [policesPretes, erreurPolices] = useFonts(Ionicons.font);
   const policesResolues = policesPretes || !!erreurPolices;
 
   const [isReady, setIsReady] = useState(false);

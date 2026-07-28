@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/common/Header';
 import { ProducteurTipCard } from '../components/dashboard/ProducteurTipCard';
 import { SkeletonCard, SkeletonMetric, SkeletonList } from '../components/common/Skeleton';
@@ -121,7 +121,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   activeOpacity={0.8}
                 >
                   <View style={styles.activityIconBox}>
-                    <Feather name="layers" size={18} color={colors.emeraldPrimary} />
+                    <Ionicons name="layers-outline" size={18} color={colors.emeraldPrimary} />
                   </View>
 
                   <View style={{ flex: 1 }}>
@@ -173,7 +173,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <View style={styles.twinCard}>
                   <View style={styles.twinHeader}>
                     <Text style={styles.twinTitle}>Parcelles suivies</Text>
-                    <Feather name="layers" size={14} color={colors.emeraldPrimary} />
+                    <Ionicons name="layers-outline" size={14} color={colors.emeraldPrimary} />
                   </View>
                   <Text style={styles.twinValue}>{stats.totalParcelles}</Text>
                 </View>
@@ -181,7 +181,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <View style={styles.twinCard}>
                   <View style={styles.twinHeader}>
                     <Text style={styles.twinTitle}>Production estimée</Text>
-                    <Feather name="trending-up" size={14} color={colors.emeraldPrimary} />
+                    <Ionicons name="trending-up-outline" size={14} color={colors.emeraldPrimary} />
                   </View>
                   <Text style={styles.twinValue}>{stats.productionTotale} kg/an</Text>
                 </View>
@@ -210,7 +210,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </View>
 
               <View style={styles.accentPillBanner}>
-                <Feather name="activity" size={14} color="#FFF" />
+                <Ionicons name="pulse-outline" size={14} color="#FFF" />
                 <Text style={styles.accentPillText}>
                   Suivi sanitaire pour une meilleure production cacaoyère 🌱
                 </Text>

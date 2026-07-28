@@ -9,7 +9,7 @@ import {
   Modal,
   RefreshControl,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/common/Header';
 import { SkeletonList } from '../components/common/Skeleton';
 import { colors, useResponsive } from '../theme';
@@ -191,7 +191,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
       >
         {/* Barre de Recherche et Filtres */}
         <View style={styles.searchBar}>
-          <Feather name="search" size={18} color={colors.textSecondary} />
+          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
             placeholder="Rechercher un producteur, village ou maladie..."
@@ -201,7 +201,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Feather name="x" size={18} color={colors.textSecondary} />
+              <Ionicons name="close-outline" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -265,7 +265,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                       {lieuCollecte(placette)}
                     </Text>
                   </View>
-                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  <Ionicons name="chevron-forward-outline" size={16} color={colors.textMuted} />
                 </View>
 
                 {/* Badges sur leur propre rangée, qui se replie : trois badges ne
@@ -275,14 +275,14 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                       en cours, pas une alerte), vert pour une fiche soumise. */}
                   {estBrouillon(parcelle) ? (
                     <View style={[styles.badgeConforme, styles.badgeDraft]}>
-                      <Feather name="edit-3" size={10} color={colors.draftText} />
+                      <Ionicons name="pencil-outline" size={10} color={colors.draftText} />
                       <Text style={[styles.badgeConformeText, { color: colors.draftText }]}>
                         {STATUT_COLLECTE_LABELS[StatutCollecte.BROUILLON]}
                       </Text>
                     </View>
                   ) : (
                     <View style={styles.badgeConforme}>
-                      <Feather name="check-circle" size={10} color={colors.emeraldPrimary} />
+                      <Ionicons name="checkmark-circle-outline" size={10} color={colors.emeraldPrimary} />
                       <Text style={styles.badgeConformeText}>
                         {STATUT_COLLECTE_LABELS[StatutCollecte.SOUMISE]}
                       </Text>
@@ -294,7 +294,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                       une fiche complète n'apprendrait rien. */}
                   {!isGeolocalisee(parcelle.id) && (
                     <View style={[styles.badgeConforme, styles.badgeDraft]}>
-                      <Feather name="map-pin" size={10} color={colors.draftText} />
+                      <Ionicons name="location-outline" size={10} color={colors.draftText} />
                       <Text style={[styles.badgeConformeText, { color: colors.draftText }]}>
                         GPS {placette ? placette.sommets.length : 0}/4
                       </Text>
@@ -305,7 +305,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                       seulement quand elle est en attente, et en gris. */}
                   {!parcelle.synced && (
                     <View style={[styles.badgeConforme, styles.badgeDraft]}>
-                      <Feather name="upload-cloud" size={10} color={colors.draftText} />
+                      <Ionicons name="cloud-upload-outline" size={10} color={colors.draftText} />
                       <Text style={[styles.badgeConformeText, { color: colors.draftText }]}>
                         À synchroniser
                       </Text>
@@ -340,7 +340,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                     invitation à finir, pas une alerte sanitaire. */}
                 {estBrouillon(parcelle) && (
                   <View style={styles.rappelBox}>
-                    <Feather name="corner-down-right" size={12} color={colors.draftText} />
+                    <Ionicons name="return-down-forward-outline" size={12} color={colors.draftText} />
                     <Text style={styles.rappelText} numberOfLines={1}>
                       Fiche à compléter puis soumettre
                     </Text>
@@ -369,7 +369,7 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                 Fiche du producteur
               </Text>
               <TouchableOpacity onPress={() => setSelectedParcelle(null)}>
-                <Feather name="x" size={22} color={colors.textPrimary} />
+                <Ionicons name="close-outline" size={22} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
 
@@ -444,12 +444,12 @@ export const EnquetesScreen: React.FC<EnquetesScreenProps> = ({
                       onEditCollecte?.(id);
                     }}
                   >
-                    <Feather name="edit-2" size={15} color={colors.textLight} />
+                    <Ionicons name="create-outline" size={15} color={colors.textLight} />
                     <Text style={styles.closeBtnText}>  Compléter la fiche</Text>
                   </TouchableOpacity>
                 ) : (
                   <View style={[styles.verrouBox, { flex: 1 }]}>
-                    <Feather name="lock" size={13} color={colors.textSecondary} />
+                    <Ionicons name="lock-closed-outline" size={13} color={colors.textSecondary} />
                     <Text style={styles.verrouTexte}>
                       Collecte soumise — correction via l'administration
                     </Text>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, useResponsive } from '../../theme';
 
 interface ProducteurTipCardProps {
@@ -25,7 +25,7 @@ export const ProducteurTipCard: React.FC<ProducteurTipCardProps> = ({
       <View style={styles.contentSection}>
         <View style={styles.headerRow}>
           <View style={styles.iconCircle}>
-            <Feather name="user-check" size={14} color={colors.emeraldPrimary} />
+            <Ionicons name="person-circle-outline" size={14} color={colors.emeraldPrimary} />
           </View>
           <Text style={styles.title}>{title}</Text>
         </View>
@@ -38,7 +38,7 @@ export const ProducteurTipCard: React.FC<ProducteurTipCardProps> = ({
           activeOpacity={0.7}
         >
           <Text style={styles.actionText}>Voir les producteurs</Text>
-          <Feather name="chevron-right" size={16} color={colors.emeraldPrimary} />
+          <Ionicons name="chevron-forward-outline" size={16} color={colors.emeraldPrimary} />
         </TouchableOpacity>
       </View>
     </View>

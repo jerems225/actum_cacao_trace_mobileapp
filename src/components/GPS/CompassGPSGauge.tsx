@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, useResponsive } from '../../theme';
 import type { PointGPS } from '../../types';
 
@@ -32,7 +32,7 @@ export const CompassGPSGauge: React.FC<CompassGPSGaugeProps> = ({
         </View>
 
         <View style={styles.areaBadge}>
-          <Feather name="layers" size={12} color={colors.emeraldPrimary} />
+          <Ionicons name="layers-outline" size={12} color={colors.emeraldPrimary} />
           <Text style={styles.areaText}>{areaInHectares > 0 ? `${areaInHectares} ha` : 'Polygone'}</Text>
         </View>
       </View>
@@ -41,7 +41,7 @@ export const CompassGPSGauge: React.FC<CompassGPSGaugeProps> = ({
       <View style={styles.gaugeContainer}>
         <View style={styles.circleOuter}>
           <View style={styles.circleInner}>
-            <Feather name="navigation" size={32} color={colors.mintSoft} />
+            <Ionicons name="navigate-outline" size={32} color={colors.mintSoft} />
             <Text style={styles.gaugeText}>
               {sommets.length}/4 Sommets
             </Text>
@@ -78,8 +78,8 @@ export const CompassGPSGauge: React.FC<CompassGPSGaugeProps> = ({
                 >
                   Sommet S{ordre}
                 </Text>
-                <Feather
-                  name={isCaptured ? 'check-circle' : 'crosshair'}
+                <Ionicons
+                  name={isCaptured ? 'checkmark-circle-outline' : 'locate-outline'}
                   size={14}
                   color={isCaptured ? colors.mintSoft : colors.textSecondary}
                 />

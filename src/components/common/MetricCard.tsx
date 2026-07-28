@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, useResponsive } from '../../theme';
 
 interface MetricCardProps {
@@ -8,7 +8,7 @@ interface MetricCardProps {
   value: string | number;
   unit?: string;
   badgeText?: string;
-  iconName: keyof typeof Feather.glyphMap;
+  iconName: keyof typeof Ionicons.glyphMap;
   variant?: 'light' | 'dark' | 'mint';
   subtitle?: string;
 }
@@ -57,7 +57,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
             },
           ]}
         >
-          <Feather
+          <Ionicons
             name={iconName}
             size={18}
             color={isDark ? colors.mintSoft : colors.emeraldPrimary}
