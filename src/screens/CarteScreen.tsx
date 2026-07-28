@@ -163,7 +163,12 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   mapBackgroundImage: {
-    ...StyleSheet.absoluteFillObject,
+    // Voir AnimatedSplash : `absoluteFillObject` n'existe plus en RN 0.86.
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
     height: '100%',
     resizeMode: 'cover',

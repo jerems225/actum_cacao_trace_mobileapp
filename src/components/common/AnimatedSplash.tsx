@@ -78,7 +78,14 @@ export const AnimatedSplash: React.FC<AnimatedSplashProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    // Remplace `StyleSheet.absoluteFillObject`, retiré des types en RN 0.86.
+    // On écrit les quatre bords : `absoluteFill` est un identifiant de style
+    // enregistré, pas un objet, et ne peut donc pas être étalé ici.
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: CREAM,
     alignItems: 'center',
     justifyContent: 'center',

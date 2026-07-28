@@ -32,8 +32,13 @@ const Contexte = createContext<ThemeContexte>({
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [mode, setMode] = useState<ThemeMode>(preferencesService.getCacheOuDefauts().theme);
-  const [schemaSysteme, setSchemaSysteme] = useState<ColorSchemeName>(
-    Appearance.getColorScheme(),
+  // Depuis RN 0.86, `ColorSchemeName` vaut 'light' | 'dark' : l'indéterminé en
+  // a été retiré, alors que `getColorScheme()` peut toujours ne rien rendre
+  // (thème système pas encore connu). On garde donc `null` dans l'état.
+  // Sans conséquence à l'affichage : seul `=== 'dark'` est testé plus bas,
+  // tout le reste retombe sur le thème clair.
+  const [schemaSysteme, setSchemaSysteme] = useState<ColorSchemeName | null>(
+    Appearance.getColorScheme() ?? null,
   );
 
   // Préférence enregistrée, relue au démarrage.
@@ -52,7 +57,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Réglage système : on suit les changements en direct (bascule nuit d'Android).
   useEffect(() => {
     const abonnement = Appearance.addChangeListener(({ colorScheme }) =>
-      setSchemaSysteme(colorScheme),
+      setSchemaSysteme(colorScheme ?? null),
     );
     return () => abonnement.remove();
   }, []);

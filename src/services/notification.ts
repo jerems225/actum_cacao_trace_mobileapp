@@ -23,7 +23,11 @@ export type { AppNotification, NotificationType };
 // Comportement en avant-plan.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    // `shouldShowAlert` a été scindé en deux depuis le SDK 53 : la bannière
+    // qui passe à l'écran, et l'entrée conservée dans le centre de
+    // notifications. On garde les deux, c'est l'équivalent de l'ancien réglage.
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),

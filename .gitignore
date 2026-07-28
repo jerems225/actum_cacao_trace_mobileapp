@@ -1,1 +1,5 @@
 node_modules
+
+# État local d'Expo : historique d'appareils et réglages du serveur de
+# développement, propres à chaque poste. Ne doit pas être partagé.
+.expo/
