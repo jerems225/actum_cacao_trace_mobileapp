@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import { Feather } from '@expo/vector-icons';
 import { AnimatedSplash } from './src/components/common/AnimatedSplash';
 import { FloatingTabBar } from './src/components/common/FloatingTabBar';
 import { ProfileModal } from './src/components/common/ProfileModal';
@@ -39,6 +41,18 @@ export default function App() {
 
 function Application() {
   const { palette, estSombre } = useTheme();
+
+  /**
+   * Police des icônes, chargée explicitement. Expo Go embarque déjà les polices
+   * de `@expo/vector-icons`, ce qui masque le problème en développement : dans un
+   * APK autonome, rien ne les enregistre et chaque icône se rend en glyphe vide.
+   * On attend donc le chargement avant d'afficher l'interface.
+   * `erreurPolices` est traité comme « prêt » : mieux vaut une interface sans
+   * icônes qu'un écran d'attente définitif si la police manque à l'appel.
+   */
+  const [policesPretes, erreurPolices] = useFonts(Feather.font);
+  const policesResolues = policesPretes || !!erreurPolices;
+
   const [isReady, setIsReady] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -169,8 +183,8 @@ function Application() {
     );
   }
 
-  // Cas rare : animation finie mais initialisation encore en cours.
-  if (!isReady) {
+  // Cas rare : animation finie mais initialisation (ou police) encore en cours.
+  if (!isReady || !policesResolues) {
     return (
       <View style={[styles.container, styles.center, styles.splashFallback]}>
         <StatusBar style={estSombre ? 'light' : 'dark'} />

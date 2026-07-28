@@ -96,9 +96,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    // `alignSelf` + largeur pleine : la barre occupe la place disponible et
-    // répartit les onglets, au lieu de grandir avec leur contenu.
-    alignSelf: 'stretch',
+    // `width: '100%'` + `maxWidth`, et surtout PAS `alignSelf: 'stretch'` :
+    // « stretch » ancre l'enfant au bord gauche avant de l'étirer, et le
+    // `maxWidth` le tronque là — la barre se décalait à gauche dès que l'écran
+    // dépassait 480 pt (tablette, paysage). Avec une largeur pleine bornée,
+    // le `alignItems: 'center'` du wrapper reprend la main et la barre reste
+    // centrée. Même recette que `contentStyle` dans le module responsive.
+    width: '100%',
+    alignSelf: 'center',
     maxWidth: 480,
     borderRadius: 32,
     paddingHorizontal: 8,
