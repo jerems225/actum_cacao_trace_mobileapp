@@ -33,16 +33,7 @@
       "expo-asset",
       "expo-font",
       "expo-sqlite",
-      "expo-secure-store",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "enableProguardInReleaseBuilds": false,
-            "enableShrinkResourcesInReleaseBuilds": false
-          }
-        }
-      ]
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {
