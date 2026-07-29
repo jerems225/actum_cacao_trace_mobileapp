@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, useResponsive } from '../theme';
 import { authService, UserProfile } from '../services/auth';
 import { OtpInput } from '../components/common/OtpInput';
+import { NomSolution } from '../components/common/NomSolution';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -172,7 +173,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.appTitle}>ActumCollect</Text>
+            {/* Le nom aux couleurs de la marque, comme sur la console. */}
+            <NomSolution taille={24} style={styles.appNom} />
             <Text style={styles.appSub}>Espace agent terrain • Connexion par code</Text>
           </View>
 
@@ -361,10 +363,9 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     marginBottom: 12,
   },
-  appTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: colors.textPrimary,
+  /** Le nom de la solution remplace l'ancien titre texte. */
+  appNom: {
+    marginTop: 2,
   },
   appSub: {
     fontSize: 13,

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive, useTheme } from '../../theme';
+import { NomSolution } from './NomSolution';
 
 interface HeaderProps {
   title?: string;
@@ -26,7 +27,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  title = 'ActumCollect',
+  title = 'Actum Collect',
   subtitle = 'Vous contrôlez la Traçabilité & l\'Inventaire',
   onNewAction,
   actionPrincipale = 'nouveau',
@@ -41,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
     useResponsive();
   // Les couleurs viennent de la palette active : l'en-tête est l'une des trois
   // surfaces déjà migrées au thème (avec la barre d'onglets et les Paramètres).
-  const { palette } = useTheme();
+  const { palette, estSombre } = useTheme();
 
   // Le titre était calculé en scale(30) sur tablette, soit 39 px sur un large
   // écran : il écrasait tout le reste et le sous-titre suivait à 18 px. On borne
@@ -139,19 +140,31 @@ export const Header: React.FC<HeaderProps> = ({
               ]}
               resizeMode="contain"
             />
-            <Text
-              style={[
-                styles.title,
-                {
-                  color: palette.textPrimary,
-                  fontSize: tailleTitre,
-                  lineHeight: Math.round(tailleTitre * 1.2),
-                },
-              ]}
-              numberOfLines={2}
-            >
-              {title}
-            </Text>
+            {/* Le nom de la solution est dessiné, pas écrit : sur les écrans
+                qui le portent, il reprend exactement les teintes de la marque.
+                Les autres titres (« Nouvelle collecte », « Carte SIG »…)
+                restent du texte ordinaire. Le brun de « ACTUM » cède au texte
+                de la palette en thème sombre, où il deviendrait illisible. */}
+            {title === 'Actum Collect' ? (
+              <NomSolution
+                taille={Math.round(tailleTitre * 0.86)}
+                couleurActum={estSombre ? palette.textPrimary : undefined}
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.title,
+                  {
+                    color: palette.textPrimary,
+                    fontSize: tailleTitre,
+                    lineHeight: Math.round(tailleTitre * 1.2),
+                  },
+                ]}
+                numberOfLines={2}
+              >
+                {title}
+              </Text>
+            )}
           </View>
           <Text
             style={[

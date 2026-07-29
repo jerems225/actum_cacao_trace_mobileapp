@@ -70,7 +70,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   return (
     <View style={styles.container}>
       <Header
-        title="ActumCollect"
+        title="Actum Collect"
         subtitle="Vous contrôlez la Traçabilité & l'Inventaire"
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
