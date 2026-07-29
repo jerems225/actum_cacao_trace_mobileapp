@@ -44,15 +44,35 @@ function Application() {
   const { palette, estSombre } = useTheme();
 
   /**
-   * Police des icônes, chargée explicitement. Expo Go embarque déjà les polices
-   * de `@expo/vector-icons`, ce qui masque le problème en développement : dans un
-   * APK autonome, rien ne les enregistre et chaque icône se rend en glyphe vide.
-   * On attend donc le chargement avant d'afficher l'interface.
-   * `erreurPolices` est traité comme « prêt » : mieux vaut une interface sans
-   * icônes qu'un écran d'attente définitif si la police manque à l'appel.
+   * Police des icônes — SECONDE ligne de défense.
+   *
+   * La première est le plugin `expo-font` d'app.json, qui embarque le fichier
+   * Ionicons.ttf dans les ressources natives de l'APK et l'enregistre au
+   * démarrage. C'est la voie fiable pour un build autonome : elle ne dépend ni
+   * du chargement d'un asset à l'exécution, ni du réseau, ni du cache.
+   *
+   * Ce `useFonts` reste utile en développement et sur le web, où le plugin
+   * natif n'intervient pas. Quand la police est déjà enregistrée nativement,
+   * il se contente de le constater.
+   *
+   * L'échec est traité comme « prêt » — mieux vaut une interface sans icônes
+   * qu'un écran d'attente définitif —, mais il est désormais SIGNALÉ. La
+   * dernière fois, cet échec silencieux a produit une application entièrement
+   * dépourvue d'icônes sans que rien, nulle part, ne l'indique.
    */
   const [policesPretes, erreurPolices] = useFonts(Ionicons.font);
   const policesResolues = policesPretes || !!erreurPolices;
+
+  useEffect(() => {
+    if (!erreurPolices) return;
+    console.warn(
+      '[Polices] Chargement de la police Ionicons échoué :',
+      erreurPolices,
+      '— les icônes s’afficheront vides si elle n’est pas embarquée nativement ' +
+        '(voir le plugin expo-font dans app.json).',
+    );
+    toast.error("Les icônes n'ont pas pu être chargées. Signalez-le à l'administration.");
+  }, [erreurPolices]);
 
   const [isReady, setIsReady] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
