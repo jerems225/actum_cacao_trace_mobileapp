@@ -6,8 +6,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '../components/common/Header';
 import { ProducteurTipCard } from '../components/dashboard/ProducteurTipCard';
 import { SkeletonCard, SkeletonMetric, SkeletonList } from '../components/common/Skeleton';
@@ -104,6 +106,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </View>
         ) : (
           <>
+            {/* Bannière d'accueil.
+                Le cadrage est calé en HAUT de la photo (`resizeMode="cover"` +
+                position d'origine) : le bas montre un polo floqué au nom d'une
+                autre organisation, illisible en avatar de 46 px mais
+                parfaitement lisible sur toute la largeur de l'écran.
+                Le dégradé n'est pas décoratif — il crée le contraste sans
+                lequel un texte blanc posé sur un feuillage clair devient
+                illisible dès que la photo change de luminosité. */}
+            <View style={styles.banniere}>
+              <Image
+                source={require('../../assets/images/agent_avatar.jpg')}
+                style={styles.banniereImage}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['rgba(10,38,29,0.15)', 'rgba(10,38,29,0.88)']}
+                style={styles.banniereVoile}
+              />
+              <View style={styles.banniereTexte}>
+                <Text style={styles.banniereTitre}>
+                  {user ? `Bonjour ${user.prenoms}` : 'Bonjour'}
+                </Text>
+                <Text style={styles.banniereSousTitre} numberOfLines={2}>
+                  Chaque relevé compte : c'est votre travail de terrain qui rend la parcelle
+                  traçable.
+                </Text>
+              </View>
+            </View>
+
             {/* SECTION ACTIVITÉ RÉCENTE (en haut) */}
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Producteurs & inventaires récents</Text>
@@ -368,6 +399,50 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '800',
     fontSize: 12,
+  },
+  /* Bannière d'accueil */
+  banniere: {
+    height: 150,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 20,
+    // Fond posé sous la photo : pendant son décodage, la carte reste une forme
+    // pleine aux couleurs de l'application plutôt qu'un rectangle blanc qui
+    // clignote à chaque ouverture de l'écran.
+    backgroundColor: colors.forestDark,
+  },
+  banniereImage: {
+    width: '100%',
+    height: '100%',
+  },
+  banniereVoile: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    // Deux tiers de la hauteur : le dégradé doit couvrir le texte sans
+    // assombrir le feuillage du haut, qui porte l'image.
+    height: '68%',
+  },
+  banniereTexte: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 14,
+  },
+  banniereTitre: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '800',
+  },
+  banniereSousTitre: {
+    color: '#E7F3EC',
+    fontSize: 12.5,
+    lineHeight: 17,
+    marginTop: 3,
+    // Bornée : au-delà, la phrase court sur toute la largeur d'une tablette et
+    // se lit mal.
+    maxWidth: 420,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
