@@ -1,1 +1,20 @@
 node_modules
+
+# État local d'Expo : historique d'appareils et réglages du serveur de
+# développement, propres à chaque poste. Ne doit pas être partagé.
+.expo/
+
+# Configuration d'environnement. Les variables EXPO_PUBLIC_* finissent dans le
+# bundle de l'application, donc extractibles d'un APK — ce ne sont pas des
+# secrets. Elles restent néanmoins propres à chaque environnement (recette,
+# production) : les versionner fait partir tout le monde sur la même URL, et
+# un poste qui bascule d'environnement modifie le dépôt sans le vouloir.
+# `.env.example` documente les clés attendues, sans les valeurs.
+.env
+.env.local
+.env.*.local
+
+# Artefacts de build
+dist/
+web-build/
+*.tsbuildinfo
