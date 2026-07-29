@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
     useResponsive();
   // Les couleurs viennent de la palette active : l'en-tête est l'une des trois
   // surfaces déjà migrées au thème (avec la barre d'onglets et les Paramètres).
-  const { palette, estSombre } = useTheme();
+  const { palette } = useTheme();
 
   // Le titre était calculé en scale(30) sur tablette, soit 39 px sur un large
   // écran : il écrasait tout le reste et le sous-titre suivait à 18 px. On borne
@@ -140,16 +140,12 @@ export const Header: React.FC<HeaderProps> = ({
               ]}
               resizeMode="contain"
             />
-            {/* Le nom de la solution est dessiné, pas écrit : sur les écrans
-                qui le portent, il reprend exactement les teintes de la marque.
-                Les autres titres (« Nouvelle collecte », « Carte SIG »…)
-                restent du texte ordinaire. Le brun de « ACTUM » cède au texte
-                de la palette en thème sombre, où il deviendrait illisible. */}
+            {/* Le nom de la solution est dessiné, pas écrit : il reprend les
+                teintes de la marque, et les fait commuter avec le thème (voir
+                NomSolution). Les autres titres (« Nouvelle collecte », « Carte
+                SIG »…) restent du texte ordinaire. */}
             {title === 'Actum Collect' ? (
-              <NomSolution
-                taille={Math.round(tailleTitre * 0.86)}
-                couleurActum={estSombre ? palette.textPrimary : undefined}
-              />
+              <NomSolution taille={Math.round(tailleTitre * 0.86)} />
             ) : (
               <Text
                 style={[

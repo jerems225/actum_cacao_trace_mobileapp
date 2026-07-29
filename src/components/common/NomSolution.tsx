@@ -18,8 +18,13 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useTheme } from '../../theme';
 
-/** Teintes du SVG de marque. À ne modifier qu'avec le fichier source. */
+/**
+ * Teintes du fichier de marque, utilisées TELLES QUELLES en thème clair.
+ * En sombre, elles cèdent la place aux équivalents de la palette : le brun
+ * #2E1A17 sur le fond #0B1512 tombe à 1,3:1, soit un nom invisible.
+ */
 const BRUN_ACTUM = '#2E1A17';
 const VERT_COLLECT = '#1B5E20';
 const AMBRE_PASTILLE = '#D97706';
@@ -27,16 +32,18 @@ const AMBRE_PASTILLE = '#D97706';
 interface NomSolutionProps {
   /** Hauteur des capitales, en points. Tout le reste s'en déduit. */
   taille?: number;
-  /** Force la teinte du mot « ACTUM » — utile sur fond sombre. */
-  couleurActum?: string;
   style?: StyleProp<ViewStyle>;
 }
 
-export const NomSolution: React.FC<NomSolutionProps> = ({
-  taille = 20,
-  couleurActum = BRUN_ACTUM,
-  style,
-}) => {
+export const NomSolution: React.FC<NomSolutionProps> = ({ taille = 20, style }) => {
+  const { palette, estSombre } = useTheme();
+
+  // En clair, la marque exacte ; en sombre, les pas déjà mesurés de la palette.
+  // L'ambre suit celui des avertissements : le même ambre vif éblouit de nuit,
+  // et la pastille est un petit aplat, donc d'autant plus agressive.
+  const couleurActum = estSombre ? palette.textPrimary : BRUN_ACTUM;
+  const couleurCollect = estSombre ? palette.emeraldPrimary : VERT_COLLECT;
+  const couleurPastille = estSombre ? palette.warning : AMBRE_PASTILLE;
   // Le « O » de COLLECT est remplacé par une épingle de carte. Elle est
   // légèrement plus petite que les capitales : à taille égale, sa pointe
   // débordait sous la ligne de base et déséquilibrait le mot.
@@ -54,7 +61,7 @@ export const NomSolution: React.FC<NomSolutionProps> = ({
     >
       <Text style={[styles.mot, { fontSize: taille, color: couleurActum }]}>ACTUM</Text>
       <View style={{ width: Math.round(taille * 0.28) }} />
-      <Text style={[styles.mot, { fontSize: taille, color: VERT_COLLECT }]}>C</Text>
+      <Text style={[styles.mot, { fontSize: taille, color: couleurCollect }]}>C</Text>
 
       {/* Épingle : un carré arrondi sur trois coins, pivoté d'un huitième de
           tour — la pointe se forme au coin resté droit. Le disque intérieur
@@ -64,7 +71,7 @@ export const NomSolution: React.FC<NomSolutionProps> = ({
           style={{
             width: epingle,
             height: epingle,
-            backgroundColor: VERT_COLLECT,
+            backgroundColor: couleurCollect,
             borderTopLeftRadius: epingle / 2,
             borderTopRightRadius: epingle / 2,
             borderBottomRightRadius: epingle / 2,
@@ -79,13 +86,13 @@ export const NomSolution: React.FC<NomSolutionProps> = ({
               width: pastille,
               height: pastille,
               borderRadius: pastille / 2,
-              backgroundColor: AMBRE_PASTILLE,
+              backgroundColor: couleurPastille,
             }}
           />
         </View>
       </View>
 
-      <Text style={[styles.mot, { fontSize: taille, color: VERT_COLLECT }]}>LLECT</Text>
+      <Text style={[styles.mot, { fontSize: taille, color: couleurCollect }]}>LLECT</Text>
     </View>
   );
 };

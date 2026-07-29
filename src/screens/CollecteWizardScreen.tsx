@@ -2100,6 +2100,57 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </View>
             )}
 
+            {/* MALADE : maladie + photo de diagnostic, IMMÉDIATEMENT sous le
+                choix qui les fait apparaître. Ce bloc était resté en bas du
+                formulaire quand l'état de santé est remonté : l'agent cochait
+                « Malade » et rien ne bougeait à l'écran, la demande de photo
+                l'attendant après les circonférences et les hauteurs. */}
+            {isCacao && draft.etatSanitaire === EtatSanitaire.MALADE && (
+              <View style={styles.maladieBox}>
+                <Text style={styles.inputLabel}>Maladie *</Text>
+                {/* Liste déroulante, « Autres » en dernière position : le champ
+                    de saisie n'apparaît que si l'agent retient cette option. */}
+                <SelectField
+                  title="Maladie observée"
+                  placeholder="Choisir dans la liste…"
+                  value={draft.maladieKey}
+                  options={maladieOptions}
+                  onChange={(key) => patchDraft({ maladieKey: key, maladieAutre: '' })}
+                />
+                {draft.maladieKey === CLE_AUTRE && (
+                  <>
+                    <Text style={styles.optionalTag}>
+                      Maladie hors liste — proposée à tous les agents après validation par
+                      l'administration.
+                    </Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Nom de la maladie"
+                      placeholderTextColor={colors.textMuted}
+                      value={draft.maladieAutre}
+                      onChangeText={(t) => patchDraft({ maladieAutre: t })}
+                    />
+                  </>
+                )}
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Photo de diagnostic *</Text>
+                {draft.photoMaladie ? (
+                  <View style={styles.photoRow}>
+                    <Image source={{ uri: draft.photoMaladie }} style={styles.photoThumb} />
+                    <TouchableOpacity style={styles.photoRetake} onPress={handleCapturePhotoMaladie}>
+                      <Ionicons name="refresh-outline" size={14} color={colors.emeraldPrimary} />
+                      <Text style={styles.photoRetakeText}>Reprendre</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.photoBtn} onPress={handleCapturePhotoMaladie}>
+                    <Ionicons name="camera-outline" size={16} color={colors.emeraldPrimary} />
+                    <Text style={styles.photoBtnText}>Ajouter la photo (obligatoire)</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {/* Espèce — arbres d'ombrage uniquement. Liste déroulante, « Autres »
                 en dernière position, et champ de saisie révélé seulement si
                 l'agent choisit cette option. */}
@@ -2227,53 +2278,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 totale.
               </Text>
             </View>
-
-            {/* MALADE : maladie (liste déroulante) + photo obligatoire */}
-            {isCacao && draft.etatSanitaire === EtatSanitaire.MALADE && (
-              <View style={styles.maladieBox}>
-                <Text style={styles.inputLabel}>Maladie *</Text>
-                {/* Liste déroulante, « Autres » en dernière position : le champ
-                    de saisie n'apparaît que si l'agent retient cette option. */}
-                <SelectField
-                  title="Maladie observée"
-                  placeholder="Choisir dans la liste…"
-                  value={draft.maladieKey}
-                  options={maladieOptions}
-                  onChange={(key) => patchDraft({ maladieKey: key, maladieAutre: '' })}
-                />
-                {draft.maladieKey === CLE_AUTRE && (
-                  <>
-                    <Text style={styles.optionalTag}>
-                      Maladie hors liste — proposée à tous les agents après validation par
-                      l'administration.
-                    </Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Nom de la maladie"
-                      placeholderTextColor={colors.textMuted}
-                      value={draft.maladieAutre}
-                      onChangeText={(t) => patchDraft({ maladieAutre: t })}
-                    />
-                  </>
-                )}
-
-                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Photo de diagnostic *</Text>
-                {draft.photoMaladie ? (
-                  <View style={styles.photoRow}>
-                    <Image source={{ uri: draft.photoMaladie }} style={styles.photoThumb} />
-                    <TouchableOpacity style={styles.photoRetake} onPress={handleCapturePhotoMaladie}>
-                      <Ionicons name="refresh-outline" size={14} color={colors.emeraldPrimary} />
-                      <Text style={styles.photoRetakeText}>Reprendre</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.photoBtn} onPress={handleCapturePhotoMaladie}>
-                    <Ionicons name="camera-outline" size={16} color={colors.emeraldPrimary} />
-                    <Text style={styles.photoBtnText}>Ajouter la photo (obligatoire)</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
 
             <TouchableOpacity style={styles.addMesureBtn} onPress={handleAddMesure}>
               <Ionicons name="add-circle-outline" size={16} color={colors.emeraldPrimary} />
