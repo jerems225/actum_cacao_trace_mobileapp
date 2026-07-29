@@ -70,7 +70,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   return (
     <View style={styles.container}>
       <Header
-        title="CacaoTrace"
+        title="ActumCollect"
         subtitle="Vous contrôlez la Traçabilité & l'Inventaire"
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
@@ -152,23 +152,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <Text style={styles.heroUnit}>Hectares</Text>
               </View>
 
-              {/* Graphique de Tendance */}
-              <View style={styles.chartContainer}>
-                <View style={styles.chartDashedLine} />
-                <View style={styles.chartBadgePill}>
-                  <Text style={styles.chartBadgeText}>{stats.tauxPlantsSains}% sains</Text>
-                </View>
-                <View style={styles.chartPolylineSimulated} />
-                <View style={styles.chartMonthsRow}>
-                  <Text style={styles.chartMonthText}>Jan</Text>
-                  <Text style={styles.chartMonthText}>Fév</Text>
-                  <Text style={styles.chartMonthText}>Mar</Text>
-                  <Text style={styles.chartMonthText}>Avr</Text>
-                  <Text style={styles.chartMonthText}>Mai</Text>
-                </View>
-              </View>
+              {/* Deux retraits demandés par le terrain, et une raison de plus
+                  de les faire : le graphique de tendance qui vivait ici était
+                  une polyligne décorative, avec « Jan » à « Mai » écrits en dur.
+                  Il ne représentait aucune donnée. Le taux de plants sains et
+                  sa jauge sont partis avec : ce sont des indicateurs de
+                  pilotage, ils ont leur place sur la console, pas dans la poche
+                  de l'agent qui a besoin de ses propres chiffres. */}
 
-              {/* Cartes jumelles en bas du Hero */}
+              {/* Chiffres de l'agent : ce qu'il a relevé, lui. */}
               <View style={styles.heroTwinCardsRow}>
                 <View style={styles.twinCard}>
                   <View style={styles.twinHeader}>
@@ -180,40 +172,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
                 <View style={styles.twinCard}>
                   <View style={styles.twinHeader}>
-                    <Text style={styles.twinTitle}>Production estimée</Text>
-                    <Ionicons name="trending-up-outline" size={14} color={colors.emeraldPrimary} />
+                    <Text style={styles.twinTitle}>Mesures relevées</Text>
+                    <Ionicons name="pulse-outline" size={14} color={colors.emeraldPrimary} />
                   </View>
-                  <Text style={styles.twinValue}>{stats.productionTotale} kg/an</Text>
+                  <Text style={styles.twinValue}>{stats.totalMesures}</Text>
                 </View>
-              </View>
-            </View>
-
-            {/* WIDGET OBJECTIF & JAUGE */}
-            <View style={styles.targetWidget}>
-              <View style={styles.targetTopRow}>
-                <Text style={styles.targetTitle}>État sanitaire des plants de cacao</Text>
-                {/* Renvoyait vers l'onglet carte, retiré du menu : on pointe
-                    désormais vers la liste des collectes, seule vue accessible. */}
-                <TouchableOpacity onPress={() => onNavigate('enquetes')}>
-                  <Text style={styles.seeAllText}>Voir les collectes</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.targetMainValue}>{stats.tauxPlantsSains}% de plants sains</Text>
-              <Text style={styles.targetSubtext}>
-                {stats.alertesSanitaires} parcelle{stats.alertesSanitaires > 1 ? 's' : ''} en alerte •{' '}
-                {stats.totalMesures} mesure{stats.totalMesures > 1 ? 's' : ''} relevée{stats.totalMesures > 1 ? 's' : ''}
-              </Text>
-
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${stats.tauxPlantsSains}%` }]} />
-              </View>
-
-              <View style={styles.accentPillBanner}>
-                <Ionicons name="pulse-outline" size={14} color="#FFF" />
-                <Text style={styles.accentPillText}>
-                  Suivi sanitaire pour une meilleure production cacaoyère 🌱
-                </Text>
               </View>
             </View>
 

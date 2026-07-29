@@ -39,10 +39,17 @@ export const OtpInput: React.FC<OtpInputProps> = ({
   const inputs = useRef<Array<TextInput | null>>([]);
 
   useEffect(() => {
-    if (autoFocus) {
-      const t = setTimeout(() => inputs.current[0]?.focus(), 60);
-      return () => clearTimeout(t);
-    }
+    if (!autoFocus) return;
+    // Première case VIDE, et non la case 0. Quand le champ arrive déjà rempli —
+    // c'est le cas du « nouveau code » reporté depuis l'écran précédent —, viser
+    // la case 0 place le curseur sur un chiffre existant ; la frappe suivante
+    // repart alors de zéro (voir `handleChange`) et efface le code saisi.
+    const premiereVide = Math.min(value.length, length - 1);
+    const t = setTimeout(() => inputs.current[premiereVide]?.focus(), 60);
+    return () => clearTimeout(t);
+    // Volontairement au montage seulement : rejouer ce focus à chaque frappe
+    // le reprendrait à l'agent qui vient de toucher une autre case.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus]);
 
   const handleChange = (index: number, text: string) => {

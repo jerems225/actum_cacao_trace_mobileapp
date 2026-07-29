@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   Switch,
   Image,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -90,6 +93,12 @@ interface CollecteWizardScreenProps {
   editParcelleId?: string | null;
   /** Appelé quand la reprise est terminée, pour libérer le mode modification. */
   onEditDone?: () => void;
+  /**
+   * Signale qu'une saisie est commencée. L'écran parent s'en sert pour demander
+   * confirmation avant de changer d'onglet — sans quoi un appui distrait sur la
+   * barre du bas ferait quitter la fiche sans un mot.
+   */
+  onSaisieEnCoursChange?: (enCours: boolean) => void;
 }
 
 export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
@@ -100,6 +109,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   user,
   editParcelleId,
   onEditDone,
+  onSaisieEnCoursChange,
 }) => {
   const modeEdition = !!editParcelleId;
   const responsive = useResponsive();
@@ -112,6 +122,15 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const [chargementEdition, setChargementEdition] = useState(false);
   // Référence de la ScrollView : sert à remonter en haut à chaque étape.
   const scrollRef = useRef<ScrollView>(null);
+
+  /**
+   * Identifiant de la fiche créée par la sauvegarde automatique.
+   *
+   * `saveCompleteCollecte` CRÉE une parcelle à chaque appel : sans mémoriser
+   * cet identifiant, chaque passage de la sauvegarde automatique fabriquerait
+   * un brouillon de plus. Une fois posé, on ne fait plus que des mises à jour.
+   */
+  const [idBrouillonAuto, setIdBrouillonAuto] = useState<string | null>(null);
 
   // --- Bloc A ---
   const [nom, setNom] = useState('');
@@ -654,26 +673,14 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
    * Dans les deux cas les erreurs de saisie bloquent : un enregistrement que le
    * backend refuserait à la synchro serait un piège silencieux.
    */
-  const handleSave = async (statut: StatutCollecte) => {
-    setErrorMsg(null);
-
-    const erreur = erreursDeSaisie();
-    if (erreur) {
-      showError(erreur);
-      return;
-    }
-
-    if (statut === StatutCollecte.SOUMISE && manquants.length > 0) {
-      showError(
-        `Soumission impossible : ${manquants.length} information(s) requise(s) manquante(s). ` +
-          'Complétez-les, ou enregistrez en brouillon pour y revenir plus tard.',
-      );
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const donnees = {
+  /**
+   * Assemble la fiche telle qu'elle sera écrite en base.
+   *
+   * Extraite de `handleSave` : la persistance automatique en a besoin elle
+   * aussi, et dupliquer cet assemblage aurait garanti qu'une des deux copies
+   * finisse par oublier un champ ajouté à l'autre.
+   */
+  const construireDonnees = (statut: StatutCollecte) => ({
         producteur: {
           nom: nom.trim(),
           prenoms: prenoms.trim(),
@@ -714,13 +721,37 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           sommets: points,
           sousPlacettes: buildSousPlacettes(),
         },
-      };
+  });
 
-      if (editParcelleId) {
+  const handleSave = async (statut: StatutCollecte) => {
+    setErrorMsg(null);
+
+    const erreur = erreursDeSaisie();
+    if (erreur) {
+      showError(erreur);
+      return;
+    }
+
+    if (statut === StatutCollecte.SOUMISE && manquants.length > 0) {
+      showError(
+        `Soumission impossible : ${manquants.length} information(s) requise(s) manquante(s). ` +
+          'Complétez-les, ou enregistrez en brouillon pour y revenir plus tard.',
+      );
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const donnees = construireDonnees(statut);
+      // La fiche a pu être créée entre-temps par la sauvegarde automatique :
+      // on reprend son identifiant, sinon on créerait un second brouillon.
+      const cible = editParcelleId ?? idBrouillonAuto;
+
+      if (cible) {
         // Reprise : envoi en MODIFICATION. Le diff est fait par le storage, qui
         // apparie sous-placettes et mesures pour ne recréer que le nouveau.
         const maj = await offlineStorage.updateCompleteCollecte({
-          parcelleId: editParcelleId,
+          parcelleId: cible,
           producteur: donnees.producteur,
           parcelle: donnees.parcelle,
           placette: donnees.placette,
@@ -754,6 +785,114 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     } finally {
       setSaving(false);
     }
+  };
+
+  // --------------------------------------------------------------------------
+  // Sauvegarde automatique du brouillon
+  // --------------------------------------------------------------------------
+  // Le terrain n'est pas un bureau : batterie à plat, application tuée par le
+  // système, appui malheureux. Une saisie d'une heure et demie ne doit tenir
+  // que dans la mémoire de l'application le temps qu'elle dure.
+  //
+  // Une fiche est jugée « commencée » dès qu'un nom de producteur est saisi :
+  // avant cela il n'y a rien à retrouver, et créer un brouillon vide encombre
+  // la liste des collectes sans rien sauver.
+  const saisieCommencee = nom.trim().length > 0 || prenoms.trim().length > 0;
+
+  /** Empêche deux écritures concurrentes, et donc deux fiches créées. */
+  const persistanceEnCours = useRef(false);
+  /** Dernier état écrit : sans cela on réécrirait la fiche à chaque frappe. */
+  const dernierEtatPersiste = useRef<string>('');
+
+  // La fonction est rangée dans une référence, mise à jour à chaque rendu :
+  // le minuteur ci-dessous peut ainsi appeler la version la plus fraîche sans
+  // qu'on ait à relancer le minuteur à chaque caractère tapé.
+  const persisterRef = useRef<() => Promise<void>>(async () => {});
+
+  persisterRef.current = async () => {
+    if (!saisieCommencee || saving || persistanceEnCours.current) return;
+
+    const donnees = construireDonnees(StatutCollecte.BROUILLON);
+    // `consentementDate` est réévaluée à chaque appel : la retirer de l'empreinte
+    // évite de croire à un changement à chaque comparaison.
+    const empreinte = JSON.stringify({
+      ...donnees,
+      producteur: { ...donnees.producteur, consentementDate: undefined },
+    });
+    if (empreinte === dernierEtatPersiste.current) return;
+
+    persistanceEnCours.current = true;
+    try {
+      const cible = editParcelleId ?? idBrouillonAuto;
+      if (cible) {
+        await offlineStorage.updateCompleteCollecte({
+          parcelleId: cible,
+          producteur: donnees.producteur,
+          parcelle: donnees.parcelle,
+          placette: donnees.placette,
+        });
+      } else {
+        const cree = await offlineStorage.saveCompleteCollecte(donnees);
+        setIdBrouillonAuto(cree.parcelle.id);
+      }
+      dernierEtatPersiste.current = empreinte;
+    } catch {
+      // Échec silencieux, et c'est voulu : l'agent est en train d'écrire.
+      // L'interrompre par une alerte pour un incident que la tentative suivante
+      // corrigera sans doute serait plus nuisible que l'incident lui-même. Les
+      // enregistrements explicites, eux, signalent bien leurs erreurs.
+    } finally {
+      persistanceEnCours.current = false;
+    }
+  };
+
+  // Une seconde et demie sans frappe déclenche l'écriture. Assez pour ne pas
+  // écrire à chaque caractère, assez court pour qu'une coupure ne coûte qu'une
+  // poignée de secondes de saisie.
+  useEffect(() => {
+    if (!saisieCommencee) return;
+    const minuteur = setTimeout(() => void persisterRef.current(), 1500);
+    return () => clearTimeout(minuteur);
+  });
+
+  // Prévient l'écran parent : il faut confirmer avant de quitter l'onglet.
+  useEffect(() => {
+    onSaisieEnCoursChange?.(saisieCommencee);
+    // Au démontage, la garde est levée : sans cela, revenir plus tard sur un
+    // autre onglet déclencherait une confirmation pour une fiche déjà close.
+    return () => onSaisieEnCoursChange?.(false);
+  }, [saisieCommencee, onSaisieEnCoursChange]);
+
+  /**
+   * Sortie du formulaire par le bouton d'en-tête. La saisie étant déjà
+   * conservée, la question n'est pas « voulez-vous perdre vos données » mais
+   * « voulez-vous vous arrêter là » — et la réponse doit dire où la retrouver.
+   */
+  const demanderFermeture = () => {
+    if (!saisieCommencee) {
+      onEditDone?.();
+      onNavigate('enquetes');
+      return;
+    }
+
+    Alert.alert(
+      'Fermer la fiche ?',
+      'Votre saisie est conservée en brouillon. Vous la retrouverez dans « Collectes » pour la compléter plus tard.',
+      [
+        { text: 'Continuer la saisie', style: 'cancel' },
+        {
+          text: 'Fermer',
+          style: 'destructive',
+          onPress: async () => {
+            // Une dernière écriture avant de partir : le minuteur n'a peut-être
+            // pas encore couru depuis la dernière frappe.
+            await persisterRef.current();
+            onEditDone?.();
+            onNavigate('enquetes');
+          },
+        },
+      ],
+    );
   };
 
   const mesuresPourSP = mesuresCollectees.filter((m) => m.numeroSP === selectedSP);
@@ -885,10 +1024,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         userName={user ? `${user.prenoms} ${user.nom}` : undefined}
         userRole={user ? `${formatRole(user.role)}${user.zoneAffectation ? ` • ${user.zoneAffectation}` : ''}` : undefined}
         avatarUri={avatarAffichable(user)}
-        onNewAction={() => {
-          setCurrentStep(1);
-          onNavigate('collecte');
-        }}
+        // Fiche ouverte : le « + » n'aurait rien à ouvrir de plus. Il devient
+        // la sortie, avec confirmation (voir `demanderFermeture`).
+        actionPrincipale="fermer"
+        onNewAction={demanderFermeture}
         onNotificationPress={onNotificationPress}
         onProfilePress={onProfilePress}
         unreadCount={unreadCount}
@@ -918,11 +1057,24 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         })}
       </View>
 
+      {/* Le clavier recouvrait le champ en cours de saisie. Deux moitiés à la
+          correction, car aucune ne suffit seule : ici, iOS remonte le contenu
+          au-dessus du clavier ; côté Android, c'est `softwareKeyboardLayoutMode`
+          à « resize » dans app.json qui redimensionne la fenêtre — sans lui,
+          aucun composant React ne peut compenser, le clavier se dessinant
+          par-dessus l'application. */}
+      <KeyboardAvoidingView
+        style={styles.flex1}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView
         ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingHorizontal }, contentStyle]}
         showsVerticalScrollIndicator={false}
+        // Sans cela, clavier ouvert, le premier appui sur un bouton ne fait que
+        // refermer le clavier : l'agent doit appuyer deux fois.
+        keyboardShouldPersistTaps="handled"
       >
         {/* BLOC A */}
         {currentStep === 1 && (
@@ -1928,6 +2080,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
         <View style={{ height: 120 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 };

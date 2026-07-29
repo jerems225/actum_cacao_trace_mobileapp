@@ -66,6 +66,10 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     color: colors.emeraldPrimary,
     fontWeight: '800',
   },
+  /** Enveloppe d'évitement du clavier : occupe la hauteur restante. */
+  flex1: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },

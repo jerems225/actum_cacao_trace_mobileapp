@@ -7,6 +7,16 @@ interface HeaderProps {
   title?: string;
   subtitle?: string;
   onNewAction?: () => void;
+  /**
+   * Rôle du bouton rond, à droite du profil.
+   *   'nouveau' — ouvre une fiche neuve (le « + » habituel) ;
+   *   'fermer'  — referme la fiche en cours.
+   *
+   * Un formulaire ouvert n'a pas besoin d'un bouton qui en ouvre un autre :
+   * au mieux il ne fait rien, au pire il fait perdre la saisie en cours. Le
+   * même bouton change donc de rôle plutôt que d'en ajouter un second.
+   */
+  actionPrincipale?: 'nouveau' | 'fermer';
   onNotificationPress?: () => void;
   onProfilePress?: () => void;
   unreadCount?: number;
@@ -16,9 +26,10 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  title = 'CacaoTrace',
+  title = 'ActumCollect',
   subtitle = 'Vous contrôlez la Traçabilité & l\'Inventaire',
   onNewAction,
+  actionPrincipale = 'nouveau',
   onNotificationPress,
   onProfilePress,
   unreadCount = 2,
@@ -79,8 +90,16 @@ export const Header: React.FC<HeaderProps> = ({
               style={[styles.circlePlusBtn, { backgroundColor: palette.pillBlack }]}
               onPress={onNewAction}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                actionPrincipale === 'fermer' ? 'Fermer la fiche' : 'Nouvelle collecte'
+              }
             >
-              <Ionicons name="add-outline" size={18} color={palette.textLight} />
+              <Ionicons
+                name={actionPrincipale === 'fermer' ? 'close-outline' : 'add-outline'}
+                size={18}
+                color={palette.textLight}
+              />
             </TouchableOpacity>
 
             <TouchableOpacity

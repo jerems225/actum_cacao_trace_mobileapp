@@ -172,7 +172,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.appTitle}>CacaoTrace</Text>
+          <Text style={styles.appTitle}>ActumCollect</Text>
           <Text style={styles.appSub}>Espace agent terrain • Connexion par code</Text>
         </View>
 
@@ -262,7 +262,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     value={nouveauOtp}
                     onChange={setNouveauOtp}
                     length={OTP_LENGTH}
-                    autoFocus
+                    // Le curseur ne se pose ici que si le champ est vide. Le code
+                    // arrive souvent déjà rempli, reporté de l'écran précédent :
+                    // y ramener le focus ferait taper la confirmation par-dessus.
+                    autoFocus={nouveauOtp.length === 0}
                     editable={!loading}
                   />
                 </View>
@@ -272,10 +275,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     value={confirmOtp}
                     onChange={setConfirmOtp}
                     length={OTP_LENGTH}
+                    // Le code du dessus est complet : c'est ici qu'on attend
+                    // l'agent, et c'est donc ici que le curseur se pose.
+                    autoFocus={nouveauOtp.length === OTP_LENGTH}
                     editable={!loading}
                     onComplete={() => submitCreation()}
                   />
                 </View>
+
+                <Text style={styles.otpAide}>
+                  Le code du haut est celui que vous venez de choisir. Retapez-le en dessous pour
+                  le confirmer.
+                </Text>
 
                 <TouchableOpacity
                   style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
@@ -463,6 +474,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  otpAide: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 4,
   },
   otpSpinner: {
     marginTop: 4,

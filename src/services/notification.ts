@@ -48,7 +48,7 @@ class NotificationService {
 
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'CacaoTrace Notifications',
+          name: 'ActumCollect Notifications',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#10B981',

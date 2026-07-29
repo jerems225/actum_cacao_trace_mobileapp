@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,6 +70,8 @@ function Application() {
   const [collecteEnEdition, setCollecteEnEdition] = useState<string | null>(null);
   /** Fiche à ouvrir dans « Enquêtes » à l'arrivée (depuis une notification). */
   const [parcelleAOuvrir, setParcelleAOuvrir] = useState<string | null>(null);
+  /** Vrai quand le wizard porte une saisie commencée (voir `changerOnglet`). */
+  const [saisieCollecteEnCours, setSaisieCollecteEnCours] = useState(false);
 
   /** Ouvre le wizard sur une collecte existante (reprise d'un brouillon). */
   const ouvrirCollecteEnEdition = (parcelleId: string) => {
@@ -83,6 +85,31 @@ function Application() {
    * au lieu de démarrer une fiche neuve.
    */
   const changerOnglet = (tab: TabType) => {
+    const quitterLaSaisie = activeTab === 'collecte' && tab !== 'collecte' && saisieCollecteEnCours;
+
+    if (quitterLaSaisie) {
+      // La saisie est déjà conservée en brouillon par le wizard : on ne prévient
+      // donc pas d'une perte, on indique où reprendre. Confirmer n'efface rien.
+      Alert.alert(
+        'Quitter la saisie ?',
+        'Votre fiche est conservée en brouillon. Vous la retrouverez dans « Collectes » pour la compléter.',
+        [
+          { text: 'Rester ici', style: 'cancel' },
+          {
+            text: 'Quitter',
+            style: 'destructive',
+            onPress: () => {
+              setSaisieCollecteEnCours(false);
+              setCollecteEnEdition(null);
+              setParcelleAOuvrir(null);
+              setActiveTab(tab);
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     setCollecteEnEdition(null);
     setParcelleAOuvrir(null);
     setActiveTab(tab);
@@ -236,7 +263,12 @@ function Application() {
             // les états du wizard survivraient d'une fiche à l'autre.
             key={collecteEnEdition ?? 'nouvelle'}
             editParcelleId={collecteEnEdition}
-            onEditDone={() => setCollecteEnEdition(null)}
+            onEditDone={() => {
+              setCollecteEnEdition(null);
+              // La fiche est close : plus rien à confirmer au prochain onglet.
+              setSaisieCollecteEnCours(false);
+            }}
+            onSaisieEnCoursChange={setSaisieCollecteEnCours}
           />
         );
       case 'carte':
