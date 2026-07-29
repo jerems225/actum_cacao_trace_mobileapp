@@ -187,7 +187,10 @@ export const TYPES_PAR_VOLET: Record<VoletPratique, { code: string; label: strin
   ],
   [PratiqueRetenue.TAILLES]: [
     { code: 'EGOURMANDAGE', label: 'Égourmandage' },
-    { code: 'PLANTES_PARASITAIRES', label: 'Plantes parasitaires (loranthacées, épiphytes)' },
+    // Le code ne bouge pas : c'est lui qui est enregistré, et le renommer
+    // rendrait illisibles les fiches déjà collectées. Seul le libellé change,
+    // pour nommer le geste (arracher) et non son objet.
+    { code: 'PLANTES_PARASITAIRES', label: 'Arrachage des plantes parasitaires (loranthacées, épiphytes)' },
     { code: 'RECOLTE_SANITAIRE', label: 'Récolte sanitaire' },
     { code: 'AUTRES', label: 'Autres' },
   ],
@@ -265,11 +268,14 @@ export const STATUT_COLLECTE_LABELS: Record<StatutCollecte, string> = {
 export enum UniteProduction {
   KG_PAR_TRAITE = 'KG_PAR_TRAITE',
   KG_PAR_AN = 'KG_PAR_AN',
+  /** Unité retenue sur le terrain : le producteur compte en sacs, pas en kg. */
+  SACS_PAR_AN = 'SACS_PAR_AN',
 }
 
 export const UNITE_PRODUCTION_LABELS: Record<UniteProduction, string> = {
   [UniteProduction.KG_PAR_TRAITE]: 'kg par traite',
   [UniteProduction.KG_PAR_AN]: 'kg par an',
+  [UniteProduction.SACS_PAR_AN]: 'sacs par an',
 };
 
 export enum TypeSujet {

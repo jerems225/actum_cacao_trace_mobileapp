@@ -24,6 +24,30 @@ export class LocationService {
     return lat >= 4.0 && lat <= 10.8 && lon >= -8.6 && lon <= -2.5;
   }
 
+  /**
+   * Distance en mètres entre deux positions (formule de haversine).
+   *
+   * La Terre est traitée comme une sphère : l'écart avec l'ellipsoïde réel est
+   * de l'ordre de 0,5 %, soit quelques centimètres sur les distances qui nous
+   * occupent ici — sans commune mesure avec la précision d'un GPS de téléphone.
+   */
+  static distanceMetres(
+    a: { latitude: number; longitude: number },
+    b: { latitude: number; longitude: number },
+  ): number {
+    const RAYON_TERRE_M = 6_371_000;
+    const rad = (deg: number) => (deg * Math.PI) / 180;
+
+    const dLat = rad(b.latitude - a.latitude);
+    const dLon = rad(b.longitude - a.longitude);
+    const lat1 = rad(a.latitude);
+    const lat2 = rad(b.latitude);
+
+    const h =
+      Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return 2 * RAYON_TERRE_M * Math.asin(Math.sqrt(h));
+  }
+
   /** Indique si la précision (mètres) respecte le seuil minimal configuré. */
   static isAccuracyAcceptable(precision?: number): boolean {
     if (precision === undefined) return false;

@@ -107,14 +107,33 @@ export interface MesureCollectee {
 export type EtapeCollecte = 1 | 2 | 3 | 4 | 5 | 6;
 
 export const ETAPES: { step: EtapeCollecte; label: string }[] = [
-  { step: 1, label: 'A. Prod.' },
-  { step: 2, label: 'B. Prat.' },
-  { step: 3, label: 'C. Infos' },
-  { step: 4, label: 'C. GPS' },
-  { step: 5, label: 'D. Mes.' },
+  // Les puces nomment ce qu'on saisit, plus la lettre du questionnaire papier :
+  // l'agent lit un écran, pas un formulaire imprimé.
+  { step: 1, label: 'Producteur' },
+  { step: 2, label: 'Parcelle' },
+  { step: 3, label: 'Placette' },
+  { step: 4, label: 'GPS' },
+  { step: 5, label: 'Mesures' },
   // Libellé court : six puces se partagent la largeur, « Validation » passait à la ligne.
   { step: 6, label: 'Valider' },
 ];
 
 /** Dernière étape du parcours — sert de borne à la navigation. */
 export const DERNIERE_ETAPE: EtapeCollecte = 6;
+
+/**
+ * Écart minimal entre deux points relevés d'une même placette, en mètres.
+ * En dessous, on mesure le bruit du GPS plutôt que la parcelle.
+ */
+export const DISTANCE_MIN_POINTS_M = 5;
+
+/**
+ * Nom court d'un point tel que l'agent le lit sur son écran : S1, Mi3, Mc2.
+ * Sert aux messages d'erreur, qui doivent désigner le point en cause dans le
+ * vocabulaire de la carte, pas dans celui du modèle de données.
+ */
+export function libellePoint(typePoint: string, ordre: number): string {
+  if (typePoint === 'MILIEU_INTERMEDIAIRE') return `Mi${ordre}`;
+  if (typePoint === 'MILIEU_CENTRAL') return `Mc${ordre}`;
+  return `S${ordre}`;
+}

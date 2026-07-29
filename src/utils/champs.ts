@@ -19,10 +19,16 @@ export const LIMITES = {
   anneeParcelle: { min: 1950, max: new Date().getFullYear(), unite: '' },
   /** Superficie déclarée, en hectares. */
   superficieHa: { min: 0.01, max: 500, unite: 'ha' },
-  /** Production estimée, en kg par an. */
-  productionKgAn: { min: 0, max: 100_000, unite: 'kg' },
-  /** Nombre de fois par an d'une pratique culturale (B4). */
-  frequenceAn: { min: 0, max: 52, unite: 'fois/an' },
+  /**
+   * Production estimée, en sacs par an. Sans plafond : le cumul des traites
+   * d'une grande parcelle dépasse ce qu'on saurait fixer de façon défendable.
+   */
+  productionSacsAn: { min: 0, unite: 'sac(s)/an' },
+  /**
+   * Nombre de fois par an d'une pratique culturale. Sans plafond non plus :
+   * un désherbage peut être hebdomadaire, et 52 refusait déjà des cas réels.
+   */
+  frequenceAn: { min: 0, unite: 'fois/an' },
   /** Cacaoyer : circonférence à 30 cm du sol, en centimètres. */
   circonference30cmCm: { min: 1, max: 300, unite: 'cm' },
   /** DBH (diamètre à 1,30 m), en mètres. */
@@ -33,7 +39,13 @@ export const LIMITES = {
   comptageSP: { min: 0, max: 5_000, unite: '' },
 } as const;
 
-export type Limite = { min: number; max: number; unite: string };
+/**
+ * `max` est facultatif. Certaines grandeurs n'ont pas de plafond défendable :
+ * un plafond arbitraire y refuse une saisie pourtant exacte, et l'agent n'a
+ * alors aucun moyen d'enregistrer ce qu'il a compté. Mieux vaut pas de borne
+ * haute qu'une borne fausse.
+ */
+export type Limite = { min: number; max?: number; unite: string };
 
 /** Ne laisse passer que des chiffres. Optionnellement borne la longueur. */
 export const sanitizeEntier = (valeur: string, maxChiffres?: number): string => {
@@ -82,6 +94,8 @@ export const verifieBorne = (
   if (n === undefined) return `${libelle} : valeur numérique attendue.`;
   const u = limite.unite ? ` ${limite.unite}` : '';
   if (n < limite.min) return `${libelle} : minimum ${limite.min}${u}.`;
-  if (n > limite.max) return `${libelle} : maximum ${limite.max}${u} — vérifiez la saisie.`;
+  if (limite.max !== undefined && n > limite.max) {
+    return `${libelle} : maximum ${limite.max}${u} — vérifiez la saisie.`;
+  }
   return null;
 };

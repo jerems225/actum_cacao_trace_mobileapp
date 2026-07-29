@@ -23,8 +23,10 @@ import { createStyles } from './collecte/collecte.styles';
 import {
   CLE_AUTRE,
   DERNIERE_ETAPE,
+  DISTANCE_MIN_POINTS_M,
   DRAFT_VIDE,
   ETAPES,
+  libellePoint,
   VOLET_VIDE,
   type EtapeCollecte,
   type MesureCollectee,
@@ -137,6 +139,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const [prenoms, setPrenoms] = useState('');
   const [genre, setGenre] = useState<Genre | null>(null);
   const [trancheAge, setTrancheAge] = useState<TrancheAge | null>(null);
+  /**
+   * Numéro de pièce d'identité : plus jamais saisi, mais toujours transporté.
+   * À la reprise d'une fiche antérieure la valeur est relue et renvoyée telle
+   * quelle ; la retirer d'ici l'écraserait en base au premier enregistrement.
+   */
   const [identite, setIdentite] = useState('');
   const [rgpdConsent, setRgpdConsent] = useState(true);
 
@@ -156,6 +163,20 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   });
   const [voletActif, setVoletActif] = useState<VoletPratique | null>(null);
   const [productionEstimee, setProductionEstimee] = useState('');
+
+  /**
+   * Années proposées pour l'installation de la parcelle, de la plus récente à
+   * la plus ancienne : une plantation de l'an dernier se choisit en un geste,
+   * une de 1970 demande de dérouler — et c'est le bon ordre de fréquence.
+   */
+  const anneesDisponibles: SelectOption[] = useMemo(() => {
+    const annees: SelectOption[] = [];
+    const debut = LIMITES.anneeParcelle.max ?? new Date().getFullYear();
+    for (let a = debut; a >= LIMITES.anneeParcelle.min; a -= 1) {
+      annees.push({ key: String(a), label: String(a) });
+    }
+    return annees;
+  }, []);
 
   // Volets réellement à saisir = intersection des cases cochées et des 3 volets.
   const voletsCoches = VOLETS_PRATIQUE.filter((v) => pratiquesRetenues.includes(v));
@@ -189,19 +210,46 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   };
 
   /**
-   * Coche/décoche une case de tête du B4.
-   * « Aucune pratique » est exclusive des trois volets : cocher l'une décoche
-   * l'autre, plutôt que de laisser passer une fiche contradictoire.
+   * Coche/décoche une case de tête des pratiques culturales.
+   *
+   * « Aucune pratique » est exclusive de TOUTES les autres, « Autres » compris :
+   * déclarer qu'il ne se fait rien sur la parcelle et décrire dans la foulée ce
+   * qui s'y fait sont deux affirmations contradictoires, et rien ne permettrait
+   * ensuite de savoir laquelle croire.
+   *
+   * Comme la cocher efface les volets déjà renseignés, elle passe par une
+   * confirmation : c'est le seul geste de cet écran qui détruit une saisie.
    */
-  const togglePratiqueRetenue = (p: PratiqueRetenue) =>
+  const appliquerAucunePratique = () =>
+    setPratiquesRetenues([PratiqueRetenue.AUCUNE]);
+
+  const togglePratiqueRetenue = (p: PratiqueRetenue) => {
+    const dejaCochee = pratiquesRetenues.includes(p);
+
+    if (p === PratiqueRetenue.AUCUNE && !dejaCochee) {
+      const aPerdre = pratiquesRetenues.filter((x) => x !== PratiqueRetenue.AUCUNE);
+      if (aPerdre.length === 0) {
+        appliquerAucunePratique();
+        return;
+      }
+      Alert.alert(
+        'Aucune pratique culturale ?',
+        'Vous déclarez qu’aucune pratique n’est menée sur cette parcelle. Les autres cases seront décochées et leur détail effacé.',
+        [
+          { text: 'Annuler', style: 'cancel' },
+          { text: 'Confirmer', style: 'destructive', onPress: appliquerAucunePratique },
+        ],
+      );
+      return;
+    }
+
     setPratiquesRetenues((prev) => {
       if (prev.includes(p)) return prev.filter((x) => x !== p);
-      if (p === PratiqueRetenue.AUCUNE) {
-        return [...prev.filter((x) => !VOLETS_PRATIQUE.includes(x as VoletPratique)), p];
-      }
-      const sansAucune = prev.filter((x) => x !== PratiqueRetenue.AUCUNE);
-      return [...sansAucune, p];
+      // Toute autre case cochée lève « Aucune pratique », sans quoi la fiche
+      // porterait les deux affirmations à la fois.
+      return [...prev.filter((x) => x !== PratiqueRetenue.AUCUNE), p];
     });
+  };
 
   const toggleDansListe = <T,>(liste: T[], valeur: T): T[] =>
     liste.includes(valeur) ? liste.filter((x) => x !== valeur) : [...liste, valeur];
@@ -326,6 +374,27 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     setCapturing({ type, ordre });
     try {
       const point = await LocationService.getCurrentPosition(type, ordre);
+
+      // Deux points de la placette ne peuvent pas se confondre. En dessous de
+      // cinq mètres, on est dans le bruit d'un GPS de téléphone : le relevé
+      // décrirait moins la parcelle que l'imprécision de l'appareil. Le cas
+      // vient presque toujours d'un agent qui capture deux fois sans se
+      // déplacer — mieux vaut le lui dire tout de suite que de découvrir un
+      // polygone aberrant à la restitution.
+      const trop = points.find((p) => {
+        if (p.typePoint === type && p.ordreSommet === ordre) return false; // Re-capture du même point.
+        return LocationService.distanceMetres(p, point) < DISTANCE_MIN_POINTS_M;
+      });
+
+      if (trop) {
+        const distance = Math.round(LocationService.distanceMetres(trop, point));
+        toast.error(
+          `Trop près du point ${libellePoint(trop.typePoint, trop.ordreSommet)} (${distance} m). ` +
+            `Écartez-vous d'au moins ${DISTANCE_MIN_POINTS_M} m avant de relever.`,
+        );
+        return;
+      }
+
       setPoints((prev) => {
         // Remplace le point de même catégorie+ordre s'il existe (re-capture).
         const filtered = prev.filter(
@@ -554,7 +623,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     const erreur =
       verifieBorne(anneeParcelle, LIMITES.anneeParcelle, "Année d'installation") ??
       verifieBorne(superficie, LIMITES.superficieHa, 'Superficie') ??
-      verifieBorne(productionEstimee, LIMITES.productionKgAn, 'Production estimée');
+      verifieBorne(productionEstimee, LIMITES.productionSacsAn, 'Production estimée');
     if (erreur) return erreur;
 
     for (const volet of voletsCoches) {
@@ -706,7 +775,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           // Pas de champ « maladies observées » ici : l'état sanitaire est relevé
           // sujet par sujet au Bloc D (mesures), avec photo de diagnostic.
           productionEstimee: parseNum(productionEstimee),
-          uniteProduction: UniteProduction.KG_PAR_AN,
+          // Le producteur compte en sacs, jamais en kilos : l'unité suit l'usage.
+          uniteProduction: UniteProduction.SACS_PAR_AN,
         },
         placette: {
           // Aperçu local ; le serveur attribuera le numéro définitif à la synchro.
@@ -1159,16 +1229,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>N° Pièce d'Identité / CNI</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="ex: CI-00984123"
-                placeholderTextColor={colors.textMuted}
-                value={identite}
-                onChangeText={setIdentite}
-              />
-            </View>
+            {/* Le numéro de pièce d'identité n'est plus demandé : une donnée
+                d'identification qui ne sert à aucun traitement n'a pas à être
+                relevée ni transportée. La colonne reste en base pour les fiches
+                antérieures, elle n'est simplement plus alimentée. */}
 
             <View style={styles.consentCard}>
               <View style={{ flex: 1 }}>
@@ -1190,27 +1254,26 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* BLOC B */}
         {currentStep === 2 && (
           <View style={styles.stepCard}>
-            <Text style={styles.blocTitle}>Bloc B — Pratiques Culturales</Text>
-            <Text style={styles.blocSub}>Superficie, entretiens et diagnostic sanitaire</Text>
+            <Text style={styles.blocTitle}>Informations sur la parcelle</Text>
+            <Text style={styles.blocSub}>Superficie, production et pratiques culturales</Text>
 
+            {/* Année choisie dans une liste plutôt que tapée : quatre chiffres au
+                clavier laissaient passer 2106 pour 2016, et l'erreur ne se voyait
+                qu'au contrôle de bornes. La liste descend de l'année en cours,
+                les plantations récentes étant les plus souvent saisies. */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Année d'installation de la parcelle</Text>
-              <TextInput
-                style={styles.textInput}
-                keyboardType="number-pad"
-                placeholder="ex: 2016"
-                placeholderTextColor={colors.textMuted}
-                value={anneeParcelle}
-                // Une année = 4 chiffres, rien d'autre.
-                onChangeText={(t) => setAnneeParcelle(sanitizeEntier(t, 4))}
+              <SelectField
+                value={anneeParcelle || null}
+                options={anneesDisponibles}
+                onChange={(v) => setAnneeParcelle(v ?? '')}
+                placeholder="Choisir une année"
+                title="Année d'installation"
               />
-              <Text style={styles.helperText}>
-                Entre {LIMITES.anneeParcelle.min} et {LIMITES.anneeParcelle.max}
-              </Text>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Superficie Déclarée (ha)</Text>
+              <Text style={styles.inputLabel}>Superficie (ha)</Text>
               <TextInput
                 style={styles.textInput}
                 keyboardType="decimal-pad"
@@ -1219,6 +1282,23 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 value={superficie}
                 onChangeText={(t) => setSuperficie(sanitizeDecimal(t))}
               />
+            </View>
+
+            {/* La production suit immédiatement la superficie : les deux se
+                répondent, et l'agent les tient du producteur d'un même souffle. */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Estimation de la production</Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="number-pad"
+                placeholder="ex: 25"
+                placeholderTextColor={colors.textMuted}
+                value={productionEstimee}
+                onChangeText={(t) => setProductionEstimee(sanitizeEntier(t))}
+              />
+              <Text style={styles.helperText}>
+                Nombre de sacs par an : petite traite + grande traite cumulées.
+              </Text>
             </View>
 
             {/* ---------- Pratiques culturales (B4 du questionnaire) ----------
@@ -1258,10 +1338,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </Text>
             </View>
 
-            {/* B4.1 — précision demandée quand « Aucune pratique » est cochée */}
+            {/* Précision demandée quand « Aucune pratique » est cochée */}
             {pratiquesRetenues.includes(PratiqueRetenue.AUCUNE) && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>B4.1 — Pratiques non listées *</Text>
+                <Text style={styles.inputLabel}>Pratiques non listées *</Text>
                 <TextInput
                   style={styles.textInput}
                   placeholder="Précisez ce qui est fait sur la parcelle"
@@ -1273,10 +1353,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </View>
             )}
 
-            {/* B4.2 — précision demandée quand « Autres » est cochée */}
+            {/* Précision demandée quand « Autres » est cochée */}
             {pratiquesRetenues.includes(PratiqueRetenue.AUTRES) && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>B4.2 — Autres pratiques *</Text>
+                <Text style={styles.inputLabel}>Autres pratiques *</Text>
                 <TextInput
                   style={styles.textInput}
                   placeholder="Précisez les pratiques non listées"
@@ -1463,9 +1543,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                     placeholder="ex: 4"
                     placeholderTextColor={colors.textMuted}
                     value={detailCourant.nombreFoisParAn}
-                    onChangeText={(t) => patchVolet({ nombreFoisParAn: sanitizeEntier(t, 2) })}
+                    // Trois chiffres au lieu de deux, et plus de plafond : un
+                    // désherbage hebdomadaire dépasse déjà l'ancien maximum.
+                    onChangeText={(t) => patchVolet({ nombreFoisParAn: sanitizeEntier(t, 3) })}
                   />
-                  <Text style={styles.helperText}>Maximum {LIMITES.frequenceAn.max} par an</Text>
                 </View>
               </View>
             )}
@@ -1478,20 +1559,9 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 produisait une donnée déclarative redondante, et deux réponses
                 possiblement contradictoires pour un même constat. */}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Estimation de Production (kg/an)</Text>
-              <TextInput
-                style={styles.textInput}
-                keyboardType="number-pad"
-                placeholder="ex: 1400"
-                placeholderTextColor={colors.textMuted}
-                value={productionEstimee}
-                onChangeText={(t) => setProductionEstimee(sanitizeEntier(t, 6))}
-              />
-              <Text style={styles.helperText}>
-                Maximum {LIMITES.productionKgAn.max.toLocaleString('fr-FR')} kg par an
-              </Text>
-            </View>
+            {/* L'estimation de production vivait ici, en fin de bloc, loin de la
+                superficie à laquelle elle se rapporte. Elle est remontée juste
+                sous celle-ci. */}
           </View>
         )}
 

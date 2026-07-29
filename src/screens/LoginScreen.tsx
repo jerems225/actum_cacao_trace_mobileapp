@@ -167,151 +167,151 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       <View style={[styles.content, { paddingHorizontal }]}>
         <View style={styles.formWrap}>
           <View style={styles.topLogoSection}>
-          <Image
-            source={require('../../assets/images/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.appTitle}>ActumCollect</Text>
-          <Text style={styles.appSub}>Espace agent terrain • Connexion par code</Text>
-        </View>
+            <Image
+              source={require('../../assets/images/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.appTitle}>ActumCollect</Text>
+            <Text style={styles.appSub}>Espace agent terrain • Connexion par code</Text>
+          </View>
 
-        {/* Fil d'étapes */}
-        <View style={styles.steps}>
-          <View style={[styles.stepDot, styles.stepDotActive]} />
-          <View style={styles.stepLine} />
-          <View style={[styles.stepDot, step === 'code' && styles.stepDotActive]} />
-        </View>
+          {/* Fil d'étapes */}
+          <View style={styles.steps}>
+            <View style={[styles.stepDot, styles.stepDotActive]} />
+            <View style={styles.stepLine} />
+            <View style={[styles.stepDot, step === 'code' && styles.stepDotActive]} />
+          </View>
 
-        {step === 'identifiant' ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Votre code agent</Text>
-            <Text style={styles.cardSub}>
-              Saisissez le code agent remis par votre administrateur.
-            </Text>
+          {step === 'identifiant' ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Votre code agent</Text>
+              <Text style={styles.cardSub}>
+                Saisissez le code agent remis par votre administrateur.
+              </Text>
 
-            {renderError()}
+              {renderError()}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Code agent</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="keypad-outline" size={16} color={colors.textSecondary} />
-                <TextInput
-                  style={styles.textInput}
-                  keyboardType="number-pad"
-                  autoFocus
-                  placeholder="CT-1234"
-                  placeholderTextColor={colors.textMuted}
-                  value={codeAgent}
-                  onChangeText={onChangeCodeAgent}
-                  onSubmitEditing={goToCodeStep}
-                  returnKeyType="next"
-                />
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Code agent</Text>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="keypad-outline" size={16} color={colors.textSecondary} />
+                  <TextInput
+                    style={styles.textInput}
+                    keyboardType="number-pad"
+                    autoFocus
+                    placeholder="CT-1234"
+                    placeholderTextColor={colors.textMuted}
+                    value={codeAgent}
+                    onChangeText={onChangeCodeAgent}
+                    onSubmitEditing={goToCodeStep}
+                    returnKeyType="next"
+                  />
+                </View>
+                <Text style={styles.hint}>Tapez les 4 chiffres, le « CT- » est ajouté automatiquement.</Text>
               </View>
-              <Text style={styles.hint}>Tapez les 4 chiffres, le « CT- » est ajouté automatiquement.</Text>
-            </View>
 
-            <TouchableOpacity
-              style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
-              onPress={goToCodeStep}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
+              <TouchableOpacity
+                style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+                onPress={goToCodeStep}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Text style={styles.loginBtnText}>Continuer</Text>
+                    <Ionicons name="arrow-forward-outline" size={18} color="#FFF" />
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {mode === 'saisie' ? 'Code de sécurité' : 'Première connexion'}
+              </Text>
+              <Text style={styles.cardSub}>
+                {mode === 'saisie'
+                  ? `Saisissez votre code à ${OTP_LENGTH} chiffres.`
+                  : `Créez votre code à ${OTP_LENGTH} chiffres, puis confirmez-le.`}
+              </Text>
+
+              {renderError()}
+
+              {mode === 'saisie' ? (
+                <View style={styles.otpGroup}>
+                  <OtpInput
+                    value={otp}
+                    onChange={setOtp}
+                    length={OTP_LENGTH}
+                    autoFocus
+                    editable={!loading}
+                    onComplete={submitCode}
+                  />
+                  {loading && (
+                    <ActivityIndicator style={styles.otpSpinner} color={colors.emeraldPrimary} />
+                  )}
+                </View>
               ) : (
                 <>
-                  <Text style={styles.loginBtnText}>Continuer</Text>
-                  <Ionicons name="arrow-forward-outline" size={18} color="#FFF" />
+                  <View style={styles.otpGroup}>
+                    <Text style={styles.otpLabel}>Nouveau code</Text>
+                    <OtpInput
+                      value={nouveauOtp}
+                      onChange={setNouveauOtp}
+                      length={OTP_LENGTH}
+                      // Le curseur ne se pose ici que si le champ est vide. Le code
+                      // arrive souvent déjà rempli, reporté de l'écran précédent :
+                      // y ramener le focus ferait taper la confirmation par-dessus.
+                      autoFocus={nouveauOtp.length === 0}
+                      editable={!loading}
+                    />
+                  </View>
+                  <View style={styles.otpGroup}>
+                    <Text style={styles.otpLabel}>Confirmer le code</Text>
+                    <OtpInput
+                      value={confirmOtp}
+                      onChange={setConfirmOtp}
+                      length={OTP_LENGTH}
+                      // Le code du dessus est complet : c'est ici qu'on attend
+                      // l'agent, et c'est donc ici que le curseur se pose.
+                      autoFocus={nouveauOtp.length === OTP_LENGTH}
+                      editable={!loading}
+                      onComplete={() => submitCreation()}
+                    />
+                  </View>
+
+                  <Text style={styles.otpAide}>
+                    Le code du haut est celui que vous venez de choisir. Retapez-le en dessous pour
+                    le confirmer.
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+                    onPress={submitCreation}
+                    disabled={loading}
+                    activeOpacity={0.85}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#FFF" />
+                    ) : (
+                      <>
+                        <Text style={styles.loginBtnText}>Créer et me connecter</Text>
+                        <Ionicons name="arrow-forward-outline" size={18} color="#FFF" />
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </>
               )}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {mode === 'saisie' ? 'Code de sécurité' : 'Première connexion'}
-            </Text>
-            <Text style={styles.cardSub}>
-              {mode === 'saisie'
-                ? `Saisissez votre code à ${OTP_LENGTH} chiffres.`
-                : `Créez votre code à ${OTP_LENGTH} chiffres, puis confirmez-le.`}
-            </Text>
 
-            {renderError()}
-
-            {mode === 'saisie' ? (
-              <View style={styles.otpGroup}>
-                <OtpInput
-                  value={otp}
-                  onChange={setOtp}
-                  length={OTP_LENGTH}
-                  autoFocus
-                  editable={!loading}
-                  onComplete={submitCode}
-                />
-                {loading && (
-                  <ActivityIndicator style={styles.otpSpinner} color={colors.emeraldPrimary} />
-                )}
-              </View>
-            ) : (
-              <>
-                <View style={styles.otpGroup}>
-                  <Text style={styles.otpLabel}>Nouveau code</Text>
-                  <OtpInput
-                    value={nouveauOtp}
-                    onChange={setNouveauOtp}
-                    length={OTP_LENGTH}
-                    // Le curseur ne se pose ici que si le champ est vide. Le code
-                    // arrive souvent déjà rempli, reporté de l'écran précédent :
-                    // y ramener le focus ferait taper la confirmation par-dessus.
-                    autoFocus={nouveauOtp.length === 0}
-                    editable={!loading}
-                  />
-                </View>
-                <View style={styles.otpGroup}>
-                  <Text style={styles.otpLabel}>Confirmer le code</Text>
-                  <OtpInput
-                    value={confirmOtp}
-                    onChange={setConfirmOtp}
-                    length={OTP_LENGTH}
-                    // Le code du dessus est complet : c'est ici qu'on attend
-                    // l'agent, et c'est donc ici que le curseur se pose.
-                    autoFocus={nouveauOtp.length === OTP_LENGTH}
-                    editable={!loading}
-                    onComplete={() => submitCreation()}
-                  />
-                </View>
-
-                <Text style={styles.otpAide}>
-                  Le code du haut est celui que vous venez de choisir. Retapez-le en dessous pour
-                  le confirmer.
-                </Text>
-
-                <TouchableOpacity
-                  style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
-                  onPress={submitCreation}
-                  disabled={loading}
-                  activeOpacity={0.85}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFF" />
-                  ) : (
-                    <>
-                      <Text style={styles.loginBtnText}>Créer et me connecter</Text>
-                      <Ionicons name="arrow-forward-outline" size={18} color="#FFF" />
-                    </>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-
-            <TouchableOpacity style={styles.linkBtn} onPress={backToIdentifiant} disabled={loading}>
-              <Ionicons name="arrow-back-outline" size={14} color={colors.textSecondary} />
-              <Text style={styles.linkText}>Changer de code agent</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              <TouchableOpacity style={styles.linkBtn} onPress={backToIdentifiant} disabled={loading}>
+                <Ionicons name="arrow-back-outline" size={14} color={colors.textSecondary} />
+                <Text style={styles.linkText}>Changer de code agent</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </View>

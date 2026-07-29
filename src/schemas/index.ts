@@ -20,7 +20,11 @@ const CI_LAT_MAX = 10.8;
 const CI_LON_MIN = -8.6;
 const CI_LON_MAX = -2.5;
 
-const borne = (l: { min: number; max: number }) => z.number().min(l.min).max(l.max);
+/** `max` facultatif : certaines grandeurs n'ont pas de plafond défendable. */
+const borne = (l: { min: number; max?: number }) => {
+  const base = z.number().min(l.min);
+  return l.max === undefined ? base : base.max(l.max);
+};
 
 export const PointGPSSchema = z.object({
   ordreSommet: z.number().int().min(1).max(4),
@@ -68,8 +72,10 @@ export const ParcelleFormSchema = z.object({
   maladiesObservees: z.string().trim().optional(),
   ancienneteMaladies: z.string().trim().optional(),
   maladiesNonListees: z.string().trim().optional(),
-  productionEstimee: borne(LIMITES.productionKgAn).optional(),
-  uniteProduction: z.enum(['KG_PAR_TRAITE', 'KG_PAR_AN']).optional(),
+  productionEstimee: borne(LIMITES.productionSacsAn).optional(),
+  // 'SACS_PAR_AN' est l'unité désormais saisie ; les deux autres restent
+  // acceptées pour les fiches enregistrées avant le changement d'unité.
+  uniteProduction: z.enum(['KG_PAR_TRAITE', 'KG_PAR_AN', 'SACS_PAR_AN']).optional(),
 });
 
 export const PlacetteFormSchema = z.object({
