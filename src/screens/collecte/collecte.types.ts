@@ -130,16 +130,24 @@ export interface MesureCollectee {
  */
 export type EtapeCollecte = 1 | 2 | 3 | 4 | 5 | 6;
 
-export const ETAPES: { step: EtapeCollecte; label: string }[] = [
+/**
+ * Deux libellés par étape :
+ *   `label` — sur la puce, court, la barre étant défilante ;
+ *   `titre` — dans le bandeau sous la barre, qui nomme l'étape en cours.
+ *
+ * Le bandeau existe parce que la barre défile : une puce active poussée hors
+ * de l'écran laissait l'agent sans repère sur ce qu'il était en train de
+ * remplir. Le titre, lui, ne bouge jamais.
+ */
+export const ETAPES: { step: EtapeCollecte; label: string; titre: string }[] = [
   // Les puces nomment ce qu'on saisit, plus la lettre du questionnaire papier :
   // l'agent lit un écran, pas un formulaire imprimé.
-  { step: 1, label: 'Producteur' },
-  { step: 2, label: 'Parcelle' },
-  { step: 3, label: 'Placette' },
-  { step: 4, label: 'GPS' },
-  { step: 5, label: 'Mesures' },
-  // Libellé court : six puces se partagent la largeur, « Validation » passait à la ligne.
-  { step: 6, label: 'Valider' },
+  { step: 1, label: 'Producteur', titre: 'Identité du producteur' },
+  { step: 2, label: 'Parcelle', titre: 'Informations sur la parcelle' },
+  { step: 3, label: 'Placette', titre: 'Localisation de la placette' },
+  { step: 4, label: 'GPS', titre: 'Points GPS de la placette' },
+  { step: 5, label: 'Mesures', titre: 'Mesures dendrométriques' },
+  { step: 6, label: 'Valider', titre: 'Validation de la collecte' },
 ];
 
 /** Dernière étape du parcours — sert de borne à la navigation. */

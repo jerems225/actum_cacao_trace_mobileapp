@@ -29,20 +29,45 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     flex: 1,
     backgroundColor: colors.backgroundLight,
   },
-  stepsContainer: {
-    flexDirection: 'row',
+  /** Enveloppe : barre défilante + bandeau de titre, sur le même fond. */
+  stepsWrapper: {
     backgroundColor: colors.backgroundCard,
-    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+  },
+  stepsContainer: {
+    flexDirection: 'row',
+    paddingTop: 12,
+    paddingBottom: 8,
     gap: 6,
   },
   stepItem: {
-    flex: 1,
+    // Plus de `flex: 1` : la barre défile, chaque puce prend la largeur de son
+    // libellé. À six onglets partagés en parts égales, « Producteur » et
+    // « Mesures » se tronquaient sur un écran étroit.
     alignItems: 'center',
     paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 12,
     backgroundColor: colors.backgroundLight,
+  },
+  /* Bandeau de titre : fixe sous la barre défilante. Il porte le repère que la
+     puce active ne garantit plus une fois sortie de l'écran. */
+  etapeBandeau: {
+    paddingBottom: 10,
+  },
+  etapeCompteur: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  etapeTitre: {
+    fontSize: scale(15),
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 1,
   },
   stepActive: {
     backgroundColor: colors.forestDark,

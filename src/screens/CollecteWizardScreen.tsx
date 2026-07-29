@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Switch,
   Image,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -70,6 +69,7 @@ import {
   SEUIL_PHOTO_CIRCONFERENCE_CM,
   verifieBorne,
 } from '../utils/champs';
+import { confirmer } from '../utils/confirmation';
 import { avatarAffichable, type UserProfile } from '../services/auth';
 import type {
   PointGPS,
@@ -127,6 +127,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const [chargementEdition, setChargementEdition] = useState(false);
   // Référence de la ScrollView : sert à remonter en haut à chaque étape.
   const scrollRef = useRef<ScrollView>(null);
+  /** Barre d'étapes : on la fait suivre l'étape active (voir plus bas). */
+  const stepsScrollRef = useRef<ScrollView>(null);
 
   /**
    * Identifiant de la fiche créée par la sauvegarde automatique.
@@ -226,7 +228,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const appliquerAucunePratique = () =>
     setPratiquesRetenues([PratiqueRetenue.AUCUNE]);
 
-  const togglePratiqueRetenue = (p: PratiqueRetenue) => {
+  const togglePratiqueRetenue = async (p: PratiqueRetenue) => {
     const dejaCochee = pratiquesRetenues.includes(p);
 
     if (p === PratiqueRetenue.AUCUNE && !dejaCochee) {
@@ -235,14 +237,13 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         appliquerAucunePratique();
         return;
       }
-      Alert.alert(
-        'Aucune pratique culturale ?',
-        'Vous déclarez qu’aucune pratique n’est menée sur cette parcelle. Les autres cases seront décochées et leur détail effacé.',
-        [
-          { text: 'Annuler', style: 'cancel' },
-          { text: 'Confirmer', style: 'destructive', onPress: appliquerAucunePratique },
-        ],
-      );
+      const ok = await confirmer({
+        titre: 'Aucune pratique culturale ?',
+        message:
+          'Vous déclarez qu’aucune pratique n’est menée sur cette parcelle. Les autres cases seront décochées et leur détail effacé.',
+        destructif: true,
+      });
+      if (ok) appliquerAucunePratique();
       return;
     }
 
@@ -505,16 +506,14 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   };
 
   /** Retire une mesure déjà enregistrée (depuis la fenêtre de correction). */
-  const supprimerMesure = (index: number) => {
-    Alert.alert('Supprimer cette mesure ?', 'Le sujet relevé sera retiré de la sous-placette.', [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: () =>
-          setMesuresCollectees((prev) => prev.filter((_, i) => i !== index)),
-      },
-    ]);
+  const supprimerMesure = async (index: number) => {
+    const ok = await confirmer({
+      titre: 'Supprimer cette mesure ?',
+      message: 'Le sujet relevé sera retiré de la sous-placette.',
+      libelleConfirmer: 'Supprimer',
+      destructif: true,
+    });
+    if (ok) setMesuresCollectees((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleAddMesure = () => {
@@ -955,10 +954,32 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   // système, appui malheureux. Une saisie d'une heure et demie ne doit tenir
   // que dans la mémoire de l'application le temps qu'elle dure.
   //
-  // Une fiche est jugée « commencée » dès qu'un nom de producteur est saisi :
-  // avant cela il n'y a rien à retrouver, et créer un brouillon vide encombre
-  // la liste des collectes sans rien sauver.
+  // Deux notions distinctes, qu'il ne faut pas confondre :
+  //
+  //   `saisieCommencee` — ce qui justifie d'ÉCRIRE un brouillon. Il faut un nom
+  //   de producteur : sans lui, la fiche serait introuvable dans la liste des
+  //   collectes, et créer un brouillon anonyme l'encombrerait pour rien.
+  //
+  //   `aQuelqueChose`   — ce qui justifie de DEMANDER CONFIRMATION avant de
+  //   quitter. Là, tout compte. Un agent qui a relevé quatre points GPS et
+  //   trente mesures sans avoir encore tapé le nom du producteur a beaucoup à
+  //   perdre ; ne se fier qu'au nom le laissait sortir sans un mot.
   const saisieCommencee = nom.trim().length > 0 || prenoms.trim().length > 0;
+
+  const aQuelqueChose =
+    saisieCommencee ||
+    genre !== null ||
+    trancheAge !== null ||
+    superficie.trim().length > 0 ||
+    anneeParcelle.trim().length > 0 ||
+    productionEstimee.trim().length > 0 ||
+    pratiquesRetenues.length > 0 ||
+    delegationId !== null ||
+    villeId !== null ||
+    village.trim().length > 0 ||
+    zoneCadastrale.trim().length > 0 ||
+    points.length > 0 ||
+    mesuresCollectees.length > 0;
 
   /** Empêche deux écritures concurrentes, et donc deux fiches créées. */
   const persistanceEnCours = useRef(false);
@@ -1018,42 +1039,44 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
   // Prévient l'écran parent : il faut confirmer avant de quitter l'onglet.
   useEffect(() => {
-    onSaisieEnCoursChange?.(saisieCommencee);
+    // `aQuelqueChose` et non `saisieCommencee` : la confirmation doit se
+    // déclencher dès qu'il y a quoi que ce soit à l'écran, pas seulement quand
+    // un nom de producteur a été tapé.
+    onSaisieEnCoursChange?.(aQuelqueChose);
     // Au démontage, la garde est levée : sans cela, revenir plus tard sur un
     // autre onglet déclencherait une confirmation pour une fiche déjà close.
     return () => onSaisieEnCoursChange?.(false);
-  }, [saisieCommencee, onSaisieEnCoursChange]);
+  }, [aQuelqueChose, onSaisieEnCoursChange]);
 
   /**
    * Sortie du formulaire par le bouton d'en-tête. La saisie étant déjà
    * conservée, la question n'est pas « voulez-vous perdre vos données » mais
    * « voulez-vous vous arrêter là » — et la réponse doit dire où la retrouver.
    */
-  const demanderFermeture = () => {
-    if (!saisieCommencee) {
+  const demanderFermeture = async () => {
+    // Rien de saisi : on sort sans poser de question, il n'y a rien à perdre.
+    if (!aQuelqueChose) {
       onEditDone?.();
       onNavigate('enquetes');
       return;
     }
 
-    Alert.alert(
-      'Fermer la fiche ?',
-      'Votre saisie est conservée en brouillon. Vous la retrouverez dans « Collectes » pour la compléter plus tard.',
-      [
-        { text: 'Continuer la saisie', style: 'cancel' },
-        {
-          text: 'Fermer',
-          style: 'destructive',
-          onPress: async () => {
-            // Une dernière écriture avant de partir : le minuteur n'a peut-être
-            // pas encore couru depuis la dernière frappe.
-            await persisterRef.current();
-            onEditDone?.();
-            onNavigate('enquetes');
-          },
-        },
-      ],
-    );
+    const ok = await confirmer({
+      titre: 'Fermer la fiche ?',
+      message: saisieCommencee
+        ? 'Votre saisie est conservée en brouillon. Vous la retrouverez dans « Collectes » pour la compléter plus tard.'
+        : 'Le nom du producteur n’est pas encore renseigné : sans lui, la fiche ne peut pas être conservée en brouillon et votre saisie sera perdue.',
+      libelleConfirmer: 'Fermer',
+      libelleAnnuler: 'Continuer la saisie',
+      destructif: true,
+    });
+    if (!ok) return;
+
+    // Une dernière écriture avant de partir : le minuteur n'a peut-être pas
+    // encore couru depuis la dernière frappe.
+    await persisterRef.current();
+    onEditDone?.();
+    onNavigate('enquetes');
   };
 
   const mesuresPourSP = mesuresCollectees.filter((m) => m.numeroSP === selectedSP);
@@ -1062,6 +1085,16 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   // milieu du bloc suivant, à la hauteur de défilement qu'il avait laissée.
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: true });
+
+    // La barre d'étapes suit : sans cela, passer à l'étape 5 laisse la puce
+    // active hors de l'écran, et l'agent ne voit plus où il en est. Largeur
+    // approchée d'une puce — inutile de mesurer au pixel près, il s'agit
+    // seulement d'amener la bonne zone dans le champ de vision.
+    const LARGEUR_PUCE = 96;
+    stepsScrollRef.current?.scrollTo({
+      x: Math.max(0, (currentStep - 2) * LARGEUR_PUCE),
+      animated: true,
+    });
   }, [currentStep]);
 
   /**
@@ -1192,28 +1225,50 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         unreadCount={unreadCount}
       />
 
-      <View style={[styles.stepsContainer, { paddingHorizontal }, contentStyle]}>
-        {ETAPES.map((item) => {
-          const isActive = currentStep === item.step;
-          const isDone = currentStep > item.step;
-          return (
-            <TouchableOpacity
-              key={item.step}
-              style={[styles.stepItem, isActive && styles.stepActive, isDone && styles.stepDone]}
-              onPress={() => setCurrentStep(item.step as never)}
-            >
-              <Text
-                style={[
-                  styles.stepText,
-                  isActive && styles.stepTextActive,
-                  isDone && !isActive && styles.stepTextDone,
-                ]}
+      {/* Barre d'étapes défilante : six libellés lisibles ne tiennent pas dans
+          une largeur de téléphone sans être tronqués. Elle se déplace toute
+          seule pour garder l'étape active en vue. */}
+      <View style={styles.stepsWrapper}>
+        <ScrollView
+          ref={stepsScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.stepsContainer, { paddingHorizontal }]}
+        >
+          {ETAPES.map((item) => {
+            const isActive = currentStep === item.step;
+            const isDone = currentStep > item.step;
+            return (
+              <TouchableOpacity
+                key={item.step}
+                style={[styles.stepItem, isActive && styles.stepActive, isDone && styles.stepDone]}
+                onPress={() => setCurrentStep(item.step as never)}
               >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.stepText,
+                    isActive && styles.stepTextActive,
+                    isDone && !isActive && styles.stepTextDone,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Titre de l'étape en cours. Fixe, lui : c'est le repère qui subsiste
+            quand la puce active est sortie de l'écran. */}
+        <View style={[styles.etapeBandeau, { paddingHorizontal }]}>
+          <Text style={styles.etapeCompteur}>
+            Étape {currentStep} sur {ETAPES.length}
+          </Text>
+          <Text style={styles.etapeTitre} numberOfLines={1}>
+            {ETAPES.find((e) => e.step === currentStep)?.titre ?? ''}
+          </Text>
+        </View>
       </View>
 
       {/* Le clavier recouvrait le champ en cours de saisie. Deux moitiés à la

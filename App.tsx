@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { confirmer } from './src/utils/confirmation';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,30 +85,22 @@ function Application() {
    * la reprise : sans cela, un appui sur « + » rouvrirait le brouillon précédent
    * au lieu de démarrer une fiche neuve.
    */
-  const changerOnglet = (tab: TabType) => {
+  const changerOnglet = async (tab: TabType) => {
     const quitterLaSaisie = activeTab === 'collecte' && tab !== 'collecte' && saisieCollecteEnCours;
 
     if (quitterLaSaisie) {
       // La saisie est déjà conservée en brouillon par le wizard : on ne prévient
       // donc pas d'une perte, on indique où reprendre. Confirmer n'efface rien.
-      Alert.alert(
-        'Quitter la saisie ?',
-        'Votre fiche est conservée en brouillon. Vous la retrouverez dans « Collectes » pour la compléter.',
-        [
-          { text: 'Rester ici', style: 'cancel' },
-          {
-            text: 'Quitter',
-            style: 'destructive',
-            onPress: () => {
-              setSaisieCollecteEnCours(false);
-              setCollecteEnEdition(null);
-              setParcelleAOuvrir(null);
-              setActiveTab(tab);
-            },
-          },
-        ],
-      );
-      return;
+      const ok = await confirmer({
+        titre: 'Quitter la saisie ?',
+        message:
+          'Votre fiche est conservée en brouillon. Vous la retrouverez dans « Collectes » pour la compléter.',
+        libelleConfirmer: 'Quitter',
+        libelleAnnuler: 'Rester ici',
+        destructif: true,
+      });
+      if (!ok) return;
+      setSaisieCollecteEnCours(false);
     }
 
     setCollecteEnEdition(null);
