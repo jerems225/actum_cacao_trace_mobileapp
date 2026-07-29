@@ -35,6 +35,7 @@ import {
 } from './collecte/collecte.types';
 import { LocationService, LocationError } from '../services/location';
 import { offlineStorage } from '../services/storage';
+import { syncManager } from '../services/sync/syncManager';
 import { delegationsService } from '../services/delegations';
 import { settingsService } from '../services/settings';
 import { referentielsService } from '../services/referentiels';
@@ -123,6 +124,8 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const styles = useMemo(() => createStyles(responsive), [responsive]);
   const [currentStep, setCurrentStep] = useState<EtapeCollecte>(1);
   const [saving, setSaving] = useState(false);
+  /** Envoi au serveur déclenché par la soumission (distinct de l'écriture locale). */
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chargementEdition, setChargementEdition] = useState(false);
   // Référence de la ScrollView : sert à remonter en haut à chaque étape.
@@ -1018,13 +1021,35 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         );
       }
 
-      toast.success(
-        statut === StatutCollecte.BROUILLON
-          ? 'Brouillon enregistré. Vous pourrez le compléter depuis « Enquêtes ».'
-          : editParcelleId
-            ? 'Collecte complétée et soumise.'
-            : 'Collecte soumise. Données mises en file de synchronisation.',
-      );
+      if (statut === StatutCollecte.BROUILLON) {
+        toast.success('Brouillon enregistré. Vous pourrez le compléter depuis « Collectes ».');
+        onEditDone?.();
+        onNavigate('enquetes');
+        return;
+      }
+
+      // Soumettre, c'est vouloir envoyer. Quand le réseau est là, l'agent n'a
+      // aucune raison d'aller lancer l'envoi à la main dans un autre onglet :
+      // il vient d'appuyer sur « Soumettre », le geste est déjà fait. La file
+      // d'attente reste le filet pour le hors-ligne, elle n'est pas le
+      // fonctionnement normal.
+      setEnvoiEnCours(true);
+      const envoi = await syncManager.push();
+      setEnvoiEnCours(false);
+
+      if (envoi.synced > 0 && envoi.failed === 0) {
+        toast.success('Collecte soumise et envoyée au serveur.');
+      } else if (!envoi.reachable) {
+        // Pas d'échec : la donnée est en sécurité sur l'appareil et partira
+        // seule. Le dire ainsi, plutôt que d'alarmer sur une absence de réseau
+        // qui est la situation ordinaire du terrain.
+        toast.success(
+          'Collecte soumise et enregistrée. Elle partira dès que le réseau sera disponible.',
+        );
+      } else {
+        toast.info(`Collecte soumise. ${envoi.message}`);
+      }
+
       onEditDone?.();
       onNavigate('enquetes');
     } catch (e) {
@@ -1032,6 +1057,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       toast.error(message);
     } finally {
       setSaving(false);
+      // Aussi ici : `syncManager.push()` rend un résultat plutôt que de lever,
+      // mais une lecture de la file en amont pourrait échouer — et l'agent
+      // resterait devant un bouton figé sur « Envoi au serveur… ».
+      setEnvoiEnCours(false);
     }
   };
 
@@ -2500,17 +2529,24 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 disabled={saving}
               >
                 <Ionicons name="checkmark-outline" size={18} color={colors.textLight} />
+                {/* Deux temps distincts, et l'agent doit voir lequel court :
+                    l'écriture sur l'appareil, puis l'envoi au serveur. Un seul
+                    libellé « Enregistrement… » laissait croire à un blocage
+                    pendant que la collecte partait. */}
                 <Text style={styles.saveBtnText}>
-                  {saving
-                    ? 'Enregistrement…'
-                    : modeEdition
-                      ? 'Compléter et soumettre'
-                      : 'Soumettre la collecte'}
+                  {envoiEnCours
+                    ? 'Envoi au serveur…'
+                    : saving
+                      ? 'Enregistrement…'
+                      : modeEdition
+                        ? 'Compléter et soumettre'
+                        : 'Soumettre la collecte'}
                 </Text>
               </TouchableOpacity>
               <Text style={styles.actionsFinAide}>
-                Un brouillon reste sur votre appareil. Une collecte soumise part au
-                serveur et n'est plus modifiable depuis le mobile.
+                Un brouillon reste sur votre appareil. Une collecte soumise part au serveur
+                aussitôt si le réseau est disponible, sinon au retour du réseau — et n'est plus
+                modifiable depuis le mobile.
               </Text>
             </View>
           </View>
