@@ -29,10 +29,17 @@ export const LIMITES = {
    * un désherbage peut être hebdomadaire, et 52 refusait déjà des cas réels.
    */
   frequenceAn: { min: 0, unite: 'fois/an' },
-  /** Cacaoyer : circonférence à 30 cm du sol, en centimètres. */
-  circonference30cmCm: { min: 1, max: 300, unite: 'cm' },
-  /** DBH (diamètre à 1,30 m), en mètres. */
-  circonferenceDBHM: { min: 0.01, max: 5, unite: 'm' },
+  /**
+   * Circonférences, LES DEUX en centimètres : à 30 cm du sol (C30) et à 1,30 m
+   * (C1,30). La seconde était relevée en mètres, ce qui obligeait l'agent à
+   * changer d'unité en cours de mesure — source d'erreurs d'un facteur 100.
+   *
+   * Minimum 5 cm : en dessous, ce n'est plus un sujet mesurable. Pas de maximum,
+   * mais au-delà de `SEUIL_PHOTO_CIRCONFERENCE_CM` une photo est demandée en
+   * justification — une valeur rare mais réelle doit rester enregistrable.
+   */
+  circonference30cmCm: { min: 5, unite: 'cm' },
+  circonference130cm: { min: 5, unite: 'cm' },
   /** Hauteur totale, en mètres. */
   hauteurM: { min: 0.1, max: 80, unite: 'm' },
   /** Comptages par sous-placette. */
@@ -46,6 +53,14 @@ export const LIMITES = {
  * haute qu'une borne fausse.
  */
 export type Limite = { min: number; max?: number; unite: string };
+
+/**
+ * Au-delà de cette circonférence, la mesure doit être justifiée par une photo.
+ * Ce n'est pas un plafond : un sujet de 120 cm existe et doit pouvoir être
+ * enregistré. La photo sert à distinguer le cas rare de la faute de frappe,
+ * sans jamais refuser la donnée.
+ */
+export const SEUIL_PHOTO_CIRCONFERENCE_CM = 100;
 
 /** Ne laisse passer que des chiffres. Optionnellement borne la longueur. */
 export const sanitizeEntier = (valeur: string, maxChiffres?: number): string => {

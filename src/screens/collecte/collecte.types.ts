@@ -41,9 +41,22 @@ export const VOLET_VIDE: VoletDraft = {
  */
 export interface MesureDraft {
   typeSujet: TypeSujet;
-  /** cm ou DBH (m) — pertinent pour le cacaoyer uniquement. */
-  circoMode: 'CM' | 'DBH';
-  circoValue: string;
+  /**
+   * Les deux circonférences, en CENTIMÈTRES toutes les deux : à 30 cm du sol
+   * et à 1,30 m. Elles se relèvent l'une après l'autre sur le même sujet ; les
+   * demander en alternance dans un champ unique obligeait à choisir, alors que
+   * le protocole veut les deux.
+   */
+  circo30: string;
+  circo130: string;
+  /**
+   * Photo justifiant une circonférence hors du commun. Voir
+   * `SEUIL_PHOTO_CIRCONFERENCE_CM` : la valeur reste acceptée, la photo lève
+   * seulement le doute entre le sujet remarquable et la faute de frappe.
+   */
+  photoCirconference: string | null;
+  /** Hauteur du fût (jusqu'aux premières branches) et hauteur totale, en m. */
+  hauteurFut: string;
   hauteur: string;
   /** Cacaoyers uniquement : un arbre d'ombrage n'a pas d'état sanitaire relevé. */
   etatSanitaire: EtatSanitaire;
@@ -58,8 +71,10 @@ export interface MesureDraft {
 
 export const DRAFT_VIDE: MesureDraft = {
   typeSujet: TypeSujet.CACAO,
-  circoMode: 'CM',
-  circoValue: '',
+  circo30: '',
+  circo130: '',
+  photoCirconference: null,
+  hauteurFut: '',
   hauteur: '',
   etatSanitaire: EtatSanitaire.VIVANT,
   especeKey: null,
@@ -91,12 +106,21 @@ export interface MesureCollectee {
   especeLibre?: string;
   emetOmbre?: boolean;
   circonference30cm?: number;
+  /**
+   * Circonférence à 1,30 m, en CENTIMÈTRES. Le champ s'appelle encore
+   * `circonferenceDBH` côté base, où il portait des mètres : les fiches
+   * antérieures gardent donc leur unité d'origine, les nouvelles sont en cm.
+   * L'écart est visible à l'œil (0,45 contre 45), il n'y a pas d'ambiguïté.
+   */
   circonferenceDBH?: number;
+  hauteurFut?: number;
   hauteurTotale?: number;
   etatSanitaire: EtatSanitaire;
   maladieId?: string;
   maladieLibre?: string;
   photoMaladie?: string;
+  /** Photo justifiant une circonférence supérieure au seuil. */
+  photoCirconference?: string;
 }
 
 /**

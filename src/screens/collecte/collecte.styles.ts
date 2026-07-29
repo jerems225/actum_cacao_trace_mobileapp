@@ -70,6 +70,113 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
   flex1: {
     flex: 1,
   },
+  /** Deux champs côte à côte (les circonférences, les hauteurs). */
+  deuxColonnes: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  colonne: {
+    flex: 1,
+    minWidth: 0,
+  },
+  /* Compteurs déduits des mesures — présentés comme un résultat, pas comme un
+     champ : ni bordure de saisie ni fond blanc, pour qu'on ne cherche pas à y
+     taper une valeur. */
+  compteursRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  compteurCase: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.mintBadge,
+  },
+  compteurValeur: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.emeraldPrimary,
+  },
+  compteurLibelle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  /* Fenêtre de relecture des mesures */
+  modaleFond: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modaleCarte: {
+    backgroundColor: colors.backgroundLight,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    // Bornée en hauteur : la fenêtre ne doit jamais couvrir tout l'écran, on
+    // doit continuer de voir qu'il y a une page derrière.
+    maxHeight: '80%',
+    paddingBottom: 8,
+  },
+  modaleEntete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  modaleTitre: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  modaleSousTitre: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  modaleCorps: {
+    paddingHorizontal: 18,
+  },
+  groupeMesures: {
+    marginTop: 16,
+  },
+  groupeTitre: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  ligneMesure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.backgroundCard,
+    marginBottom: 6,
+  },
+  ligneMesureTitre: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  ligneMesureDetail: {
+    fontSize: 11.5,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  ligneMesureAction: {
+    padding: 6,
+  },
   scrollView: {
     flex: 1,
   },

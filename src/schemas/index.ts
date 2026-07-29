@@ -106,7 +106,8 @@ export const MesureArbreFormSchema = z
     emetOmbre: z.boolean().optional(),
     estMature: z.boolean().optional(),
     circonference30cm: borne(LIMITES.circonference30cmCm).optional(),
-    circonferenceDBH: borne(LIMITES.circonferenceDBHM).optional(),
+    // Circonférence à 1,30 m, désormais en centimètres comme celle à 30 cm.
+    circonferenceDBH: borne(LIMITES.circonference130cm).optional(),
     hauteurFut: borne(LIMITES.hauteurM).optional(),
     hauteurTotale: borne(LIMITES.hauteurM).optional(),
     etatSanitaire: z
