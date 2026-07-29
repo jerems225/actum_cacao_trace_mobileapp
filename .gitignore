@@ -18,3 +18,9 @@ node_modules
 dist/
 web-build/
 *.tsbuildinfo
+
+# Projets natifs générés par « npx expo prebuild » — jamais versionnés : ils
+# se régénèrent à partir d'app.json, et les commiter ferait diverger les deux
+# sources de vérité.
+/android
+/ios
