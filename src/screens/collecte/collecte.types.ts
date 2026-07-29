@@ -128,7 +128,7 @@ export interface MesureCollectee {
  * La 6e est une page de validation : le récapitulatif de ce qui manque et les
  * deux actions d'enregistrement y vivent, plutôt qu'au pied du Bloc D déjà long.
  */
-export type EtapeCollecte = 1 | 2 | 3 | 4 | 5 | 6;
+export type EtapeCollecte = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /**
  * Deux libellés par étape :
@@ -147,11 +147,12 @@ export const ETAPES: { step: EtapeCollecte; label: string; titre: string }[] = [
   { step: 3, label: 'Placette', titre: 'Localisation de la placette' },
   { step: 4, label: 'GPS', titre: 'Points GPS de la placette' },
   { step: 5, label: 'Mesures', titre: 'Mesures dendrométriques' },
-  { step: 6, label: 'Valider', titre: 'Validation de la collecte' },
+  { step: 6, label: 'Autres arbres', titre: "Arbres n'émettant pas d'ombre" },
+  { step: 7, label: 'Valider', titre: 'Validation de la collecte' },
 ];
 
 /** Dernière étape du parcours — sert de borne à la navigation. */
-export const DERNIERE_ETAPE: EtapeCollecte = 6;
+export const DERNIERE_ETAPE: EtapeCollecte = 7;
 
 /**
  * Écart minimal entre deux points relevés d'une même placette, en mètres.

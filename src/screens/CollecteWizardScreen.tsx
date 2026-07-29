@@ -348,6 +348,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   /** Fenêtre de relecture et de correction des mesures de la SP courante. */
   const [modaleMesuresOuverte, setModaleMesuresOuverte] = useState(false);
 
+  // --- Bloc E : arbres n'émettant pas d'ombre ---
+  const [especeNonEmettrice, setEspeceNonEmettrice] = useState<string | null>(null);
+  const [especeNonEmettriceAutre, setEspeceNonEmettriceAutre] = useState('');
+
   /** La plus grande des deux circonférences saisies — commande la photo. */
   const circonferenceMaxSaisie = Math.max(
     parseNombre(draft.circo30) ?? 0,
@@ -373,13 +377,28 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       const c = parSP[m.numeroSP] ?? { cacaoVivants: 0, arbres: 0 };
       if (m.typeSujet === TypeSujet.CACAO) {
         if (m.etatSanitaire === EtatSanitaire.VIVANT) c.cacaoVivants += 1;
-      } else {
+      } else if (m.emetOmbre !== false) {
+        // Les arbres qui n'émettent pas d'ombre sont recensés à part (bloc
+        // suivant) : les compter ici gonflerait le couvert d'ombrage de la
+        // sous-placette avec des sujets qui n'en produisent pas.
         c.arbres += 1;
       }
       parSP[m.numeroSP] = c;
     }
     return parSP;
   }, [mesuresCollectees]);
+
+  /**
+   * Arbres n'émettant pas d'ombre, recensés pour la placette entière.
+   *
+   * Ils sont rattachés à SP1 par convention : le modèle exige une
+   * sous-placette, et le recensement de la placette y est déjà porté. Ce qui
+   * les distingue n'est pas leur rattachement mais `emetOmbre: false`.
+   */
+  const arbresNonEmetteurs = useMemo(
+    () => mesuresCollectees.filter((m) => m.typeSujet !== TypeSujet.CACAO && m.emetOmbre === false),
+    [mesuresCollectees],
+  );
 
   /**
    * Maladies proposées : le référentiel serveur dès qu'il est synchronisé,
@@ -514,6 +533,75 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       destructif: true,
     });
     if (ok) setMesuresCollectees((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  /**
+   * Ajoute un arbre n'émettant pas d'ombre au recensement de la placette.
+   *
+   * Volontairement plus léger que le Bloc D : ni circonférence, ni hauteur, ni
+   * état sanitaire. Ce bloc répond à une question de dénombrement — combien
+   * d'arbres de ce type, et lesquels — et non à un relevé dendrométrique.
+   * Demander les mêmes champs qu'au Bloc D en découragerait la saisie.
+   */
+  const ajouterArbreNonEmetteur = () => {
+    let especeNom: string | undefined;
+    let especeIdVal: string | undefined;
+    let especeLibreVal: string | undefined;
+
+    if (especeNonEmettrice === CLE_AUTRE) {
+      if (!especeNonEmettriceAutre.trim()) {
+        toast.error("Précisez le nom de l'espèce.");
+        return;
+      }
+      especeLibreVal = especeNonEmettriceAutre.trim();
+      especeNom = especeLibreVal;
+    } else if (especeNonEmettrice?.startsWith('id:')) {
+      const id = especeNonEmettrice.slice(3);
+      especeIdVal = id;
+      especeNom = especes.find((e) => e.id === id)?.nom;
+    } else {
+      toast.error("Sélectionnez l'espèce de l'arbre.");
+      return;
+    }
+
+    setMesuresCollectees((prev) => [
+      ...prev,
+      {
+        // SP1 par convention : la placette entière est recensée là.
+        numeroSP: 1,
+        typeSujet: TypeSujet.ARBRE_OMBRAGE,
+        espece: especeNom,
+        especeId: especeIdVal,
+        especeLibre: especeLibreVal,
+        // C'est CE drapeau qui range l'arbre au bloc E plutôt qu'au bloc D.
+        emetOmbre: false,
+        etatSanitaire: EtatSanitaire.VIVANT,
+      },
+    ]);
+
+    // On garde l'espèce sélectionnée : l'agent en recense souvent plusieurs de
+    // la même essence à la suite, un appui suffit alors pour la suivante.
+    setEspeceNonEmettriceAutre('');
+  };
+
+  /**
+   * Retire UN arbre de l'espèce donnée (le dernier ajouté).
+   *
+   * Le récapitulatif étant groupé, on ne peut pas désigner une ligne précise :
+   * on décrémente. Sans confirmation, à la différence d'une mesure du Bloc D —
+   * ici rien n'est perdu qu'un appui ne rétablisse.
+   */
+  const retirerUnArbreNonEmetteur = (nomEspece: string) => {
+    setMesuresCollectees((prev) => {
+      const correspond = (m: MesureCollectee) =>
+        m.typeSujet !== TypeSujet.CACAO &&
+        m.emetOmbre === false &&
+        (m.espece ?? 'Espèce non précisée') === nomEspece;
+
+      const dernier = prev.map(correspond).lastIndexOf(true);
+      if (dernier < 0) return prev;
+      return prev.filter((_, i) => i !== dernier);
+    });
   };
 
   const handleAddMesure = () => {
@@ -1233,7 +1321,15 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           ref={stepsScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.stepsContainer, { paddingHorizontal }]}
+          // Marges par le `contentContainerStyle` et non par le style de la
+          // ScrollView : posées sur cette dernière, elles rogneraient la zone
+          // de défilement et les puces seraient coupées net aux bords. Ici
+          // elles font partie du contenu, donc la première et la dernière puce
+          // gardent leur respiration quel que soit le défilement.
+          contentContainerStyle={[
+            styles.stepsContainer,
+            { paddingLeft: paddingHorizontal, paddingRight: paddingHorizontal },
+          ]}
         >
           {ETAPES.map((item) => {
             const isActive = currentStep === item.step;
@@ -1293,7 +1389,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* BLOC A */}
         {currentStep === 1 && (
           <View style={styles.stepCard}>
-            <Text style={styles.blocTitle}>Bloc A — Informations du Producteur</Text>
             <Text style={styles.blocSub}>Identité socio-économique et consentement</Text>
 
             <View style={styles.inputGroup}>
@@ -1398,7 +1493,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* BLOC B */}
         {currentStep === 2 && (
           <View style={styles.stepCard}>
-            <Text style={styles.blocTitle}>Informations sur la parcelle</Text>
             <Text style={styles.blocSub}>Superficie, production et pratiques culturales</Text>
 
             {/* Année choisie dans une liste plutôt que tapée : quatre chiffres au
@@ -1713,7 +1807,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {currentStep === 3 && (
           <View>
             <View style={styles.stepCard}>
-              <Text style={styles.blocTitle}>Bloc C — Localisation de la placette</Text>
               <Text style={styles.blocSub}>
                 Renseignez la zone pour générer le numéro, puis relevez les sommets GPS.
               </Text>
@@ -1890,7 +1983,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {currentStep === 4 && (
           <View>
             <View style={styles.stepCard}>
-              <Text style={styles.blocTitle}>Bloc C — Sommets GPS</Text>
               <Text style={styles.blocSub}>
                 Placette {numeroApercu ?? ''} — relevez les 4 sommets qui délimitent la parcelle.
               </Text>
@@ -1915,7 +2007,6 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* BLOC D */}
         {currentStep === 5 && (
           <View style={styles.stepCard}>
-            <Text style={styles.blocTitle}>Bloc D — Mesures Dendrométriques</Text>
             <Text style={styles.blocSub}>Comptage et circonférence par sous-placette</Text>
 
             <Text style={styles.inputLabel}>Sous-placette Échantillon</Text>
@@ -2240,12 +2331,116 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           </View>
         )}
 
-        {/* ÉTAPE 6 — Validation. Le récapitulatif de ce qui manque et les deux
-            actions d'enregistrement vivent ici, et non au pied du Bloc D : cette
-            page ne sert qu'à décider, sans avoir à défiler une longue saisie. */}
+        {/* BLOC E — arbres n'émettant pas d'ombre */}
         {currentStep === 6 && (
           <View style={styles.stepCard}>
-            <Text style={styles.blocTitle}>Validation de la collecte</Text>
+            <Text style={styles.blocSub}>
+              Les autres arbres présents sur la placette, recensés à part des arbres d'ombrage.
+            </Text>
+
+            {/* Le compte se fait tout seul : l'agent ajoute les arbres qu'il
+                voit, le total suit. Lui demander en plus de saisir un nombre
+                aurait rouvert la contradiction entre le chiffre annoncé et les
+                sujets réellement recensés. */}
+            <View style={[styles.compteursRow, { marginBottom: 16 }]}>
+              <View style={styles.compteurCase}>
+                <Text style={styles.compteurValeur}>{arbresNonEmetteurs.length}</Text>
+                <Text style={styles.compteurLibelle}>
+                  arbre{arbresNonEmetteurs.length > 1 ? 's' : ''} recensé
+                  {arbresNonEmetteurs.length > 1 ? 's' : ''}
+                </Text>
+              </View>
+              <View style={styles.compteurCase}>
+                <Text style={styles.compteurValeur}>
+                  {new Set(arbresNonEmetteurs.map((a) => a.espece ?? '—')).size}
+                </Text>
+                <Text style={styles.compteurLibelle}>espèce(s) différente(s)</Text>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Espèce de l'arbre</Text>
+              <SelectField
+                title="Espèce de l'arbre"
+                placeholder="Choisir dans la liste…"
+                value={especeNonEmettrice}
+                // Toutes les espèces sont proposées, pas seulement celles
+                // marquées non émettrices : le référentiel importé les donne
+                // toutes émettrices par défaut, et c'est l'agent devant l'arbre
+                // qui sait ce qu'il voit. C'est la saisie DANS ce bloc qui vaut
+                // classement, pas la fiche du référentiel.
+                options={especeOptions}
+                onChange={(key) => {
+                  setEspeceNonEmettrice(key);
+                  setEspeceNonEmettriceAutre('');
+                }}
+              />
+              {especeNonEmettrice === CLE_AUTRE && (
+                <>
+                  <Text style={styles.optionalTag}>
+                    Espèce hors liste — proposée à tous les agents après validation par
+                    l'administration.
+                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Nom de l'espèce"
+                    placeholderTextColor={colors.textMuted}
+                    value={especeNonEmettriceAutre}
+                    onChangeText={setEspeceNonEmettriceAutre}
+                  />
+                </>
+              )}
+            </View>
+
+            <TouchableOpacity style={styles.addMesureBtn} onPress={ajouterArbreNonEmetteur}>
+              <Ionicons name="add-circle-outline" size={16} color={colors.emeraldPrimary} />
+              <Text style={styles.addMesureText}>Ajouter cet arbre au recensement</Text>
+            </TouchableOpacity>
+            <Text style={styles.helperText}>
+              L'espèce reste sélectionnée après l'ajout : plusieurs arbres de la même essence
+              s'enregistrent d'un appui chacun.
+            </Text>
+
+            {/* Récapitulatif groupé par espèce : c'est la lecture utile — non
+                pas « quarante lignes », mais « douze fromagers, huit tecks ». */}
+            {arbresNonEmetteurs.length > 0 && (
+              <View style={styles.mesuresList}>
+                <Text style={styles.mesuresListTitle}>Recensement par espèce</Text>
+                {Object.entries(
+                  arbresNonEmetteurs.reduce<Record<string, number>>((acc, a) => {
+                    const nom = a.espece ?? 'Espèce non précisée';
+                    acc[nom] = (acc[nom] ?? 0) + 1;
+                    return acc;
+                  }, {}),
+                )
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([nom, nombre]) => (
+                    <View key={nom} style={styles.ligneMesure}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.ligneMesureTitre}>{nom}</Text>
+                        <Text style={styles.ligneMesureDetail}>
+                          {nombre} arbre{nombre > 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => retirerUnArbreNonEmetteur(nom)}
+                        accessibilityLabel={`Retirer un ${nom}`}
+                        style={styles.ligneMesureAction}
+                      >
+                        <Ionicons name="remove-circle-outline" size={18} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ÉTAPE 7 — Validation. Le récapitulatif de ce qui manque et les deux
+            actions d'enregistrement vivent ici, et non au pied du Bloc D : cette
+            page ne sert qu'à décider, sans avoir à défiler une longue saisie. */}
+        {currentStep === 7 && (
+          <View style={styles.stepCard}>
             <Text style={styles.blocSub}>
               {manquants.length === 0
                 ? 'La fiche est complète. Vous pouvez la soumettre.'
