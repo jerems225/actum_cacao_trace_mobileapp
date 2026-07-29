@@ -9,6 +9,11 @@
       },
       "ios": {
         "distribution": "internal"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://actum-cacao-trace-backend.onrender.com/api/v1",
+        "EXPO_PUBLIC_GPS_MIN_ACCURACY_METERS": "10",
+        "EXPO_PUBLIC_ALLOW_GPS_SIMULATION": "true"
       }
     },
     "production": {
@@ -17,6 +22,11 @@
       },
       "ios": {
         "distribution": "store"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://actum-cacao-trace-backend.onrender.com/api/v1",
+        "EXPO_PUBLIC_GPS_MIN_ACCURACY_METERS": "10",
+        "EXPO_PUBLIC_ALLOW_GPS_SIMULATION": "false"
       }
     }
   }

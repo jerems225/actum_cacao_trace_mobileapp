@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Actum Collect",
-    "slug": "cacaotrace",
+    "slug": "actumcollect",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "cacaotrace",
+    "scheme": "actumcollect",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/images/splash-icon.png",
@@ -17,10 +17,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ci.actumdev.cacaotrace"
+      "bundleIdentifier": "ci.actumdev.actumcollect"
     },
     "android": {
-      "package": "ci.actumdev.cacaotrace",
+      "package": "ci.actumdev.actumcollect",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -36,9 +36,10 @@
       "expo-sqlite",
       "expo-secure-store"
     ],
+    "owner": "jeremie.niondo",
     "extra": {
       "eas": {
-        "projectId": "27dd5fa3-dde3-42ff-9f2f-24cdbb176dae"
+        "projectId": "1970953c-7800-4dfb-863c-c9b264e4c8c5"
       }
     }
   }
