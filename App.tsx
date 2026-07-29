@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
-import { confirmer } from './src/utils/confirmation';
+import { confirmer, ConfirmationHost } from './src/components/common/Confirmation';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
@@ -223,6 +223,7 @@ function Application() {
           }}
         />
         <ToastHost />
+        <ConfirmationHost />
       </>
     );
   }
@@ -304,6 +305,10 @@ function Application() {
         onNotificationSelect={handleNotificationSelect}
       />
       <ToastHost />
+      {/* Monté en dernier, donc au-dessus de tout : une confirmation qui
+          apparaîtrait derrière une autre surface serait invisible, et l'agent
+          attendrait une réponse à une question qu'il ne voit pas. */}
+      <ConfirmationHost />
     </View>
   );
 }

@@ -69,7 +69,7 @@ import {
   SEUIL_PHOTO_CIRCONFERENCE_CM,
   verifieBorne,
 } from '../utils/champs';
-import { confirmer } from '../utils/confirmation';
+import { confirmer } from '../components/common/Confirmation';
 import { avatarAffichable, type UserProfile } from '../services/auth';
 import type {
   PointGPS,
