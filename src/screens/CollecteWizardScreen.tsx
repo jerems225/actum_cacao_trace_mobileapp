@@ -77,6 +77,7 @@ import type {
   PlacetteLocal,
   Espece,
   Maladie,
+  TypeCadastre,
   VoletPratique,
   PratiqueCulturaleLocal,
 } from '../types';
@@ -260,6 +261,9 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   const [delegationId, setDelegationId] = useState<string | null>(null);
   const [villeId, setVilleId] = useState<string | null>(null);
   const [village, setVillage] = useState('');
+  /** Type de zone cadastrale, choisi dans le référentiel administré. */
+  const [zoneCadastrale, setZoneCadastrale] = useState('');
+  const [typesCadastre, setTypesCadastre] = useState<TypeCadastre[]>([]);
   // Tous les points de la placette (S1-4, Mi1-6, Mc1-2).
   const [points, setPoints] = useState<PointGPS[]>([]);
   const [capturing, setCapturing] = useState<{ type: TypePoint; ordre: number } | null>(null);
@@ -290,11 +294,15 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       setManualEditEnabled((await settingsService.getCached()).agentManualPointEdit);
       setEspeces(await referentielsService.getEspecesCached());
       setMaladiesList(await referentielsService.getMaladiesCached());
+      setTypesCadastre(await referentielsService.getTypesCadastreCached());
       setDelegations(await delegationsService.refresh());
       setManualEditEnabled((await settingsService.refresh()).agentManualPointEdit);
       const ref = await referentielsService.refresh();
       setEspeces(ref.especes);
       setMaladiesList(ref.maladies);
+      // `refresh` ne rend pas les types de cadastre : on relit le cache qu'il
+      // vient de mettre à jour, plutôt que d'élargir sa signature.
+      setTypesCadastre(await referentielsService.getTypesCadastreCached());
     })();
   }, []);
 
@@ -786,6 +794,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           villeId: villeId ?? undefined,
           ville: selectedVille?.nom,
           village: village.trim() || undefined,
+          zoneCadastrale: zoneCadastrale.trim() || undefined,
           chefEquipe: chefEquipe.trim() || undefined,
           dateInventaire: collecteDate.toISOString(),
           sommets: points,
@@ -1035,6 +1044,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         setDelegationId(plc.delegationId ?? null);
         setVilleId(plc.villeId ?? null);
         setVillage(plc.village ?? '');
+        setZoneCadastrale(plc.zoneCadastrale ?? '');
         setChefEquipe(plc.chefEquipe ?? '');
         setPoints(plc.sommets ?? []);
 
@@ -1664,6 +1674,26 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   onChangeText={setVillage}
                 />
               </View>
+
+              {/* Type de cadastre : liste administrée depuis la console et mise
+                  en cache. La zone se saisissait librement, ce qui produisait
+                  autant d'orthographes que d'agents — rien de regroupable à la
+                  restitution. La liste est masquée si elle est vide plutôt que
+                  d'afficher un champ qu'on ne peut pas renseigner. */}
+              {typesCadastre.length > 0 && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    Type de cadastre <Text style={styles.optionalTag}>(facultatif)</Text>
+                  </Text>
+                  <SelectField
+                    value={zoneCadastrale || null}
+                    options={typesCadastre.map((t) => ({ key: t.nom, label: t.nom }))}
+                    onChange={(v) => setZoneCadastrale(v ?? '')}
+                    placeholder="Choisir un type"
+                    title="Type de cadastre"
+                  />
+                </View>
+              )}
 
               {/* Identification de la collecte : chef d'équipe + date auto */}
               <View style={styles.divider} />

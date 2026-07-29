@@ -8,7 +8,7 @@
 
 import { apiRequest } from './http';
 import type { UserProfile } from './auth';
-import type { Delegation, Espece, Maladie } from '../types';
+import type { Delegation, Espece, Maladie, TypeCadastre } from '../types';
 
 /** Réglages applicatifs pilotés par l'admin (flags). */
 export interface AppSettings {
@@ -193,6 +193,9 @@ export const apiClient = {
   },
   getMaladies(): Promise<Maladie[]> {
     return apiRequest<Maladie[]>('/maladies');
+  },
+  getTypesCadastre(): Promise<TypeCadastre[]> {
+    return apiRequest<TypeCadastre[]>('/types-cadastre');
   },
 
   // --- Synchronisation ---

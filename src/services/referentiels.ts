@@ -7,11 +7,19 @@
 
 import { apiClient } from './apiClient';
 import { getPersistence, StorageKeys } from './db';
-import type { Espece, Maladie } from '../types';
+import type { Espece, Maladie, TypeCadastre } from '../types';
 
 class ReferentielsService {
   private especes: Espece[] | null = null;
   private maladies: Maladie[] | null = null;
+  private typesCadastre: TypeCadastre[] | null = null;
+
+  async getTypesCadastreCached(): Promise<TypeCadastre[]> {
+    if (this.typesCadastre) return this.typesCadastre;
+    const p = await getPersistence();
+    this.typesCadastre = (await p.getKV<TypeCadastre[]>(StorageKeys.TYPES_CADASTRE)) ?? [];
+    return this.typesCadastre;
+  }
 
   async getEspecesCached(): Promise<Espece[]> {
     if (this.especes) return this.especes;
@@ -41,6 +49,13 @@ class ReferentielsService {
       const maladies = await apiClient.getMaladies();
       this.maladies = maladies;
       await p.setKV(StorageKeys.MALADIES, maladies);
+    } catch {
+      /* garde le cache */
+    }
+    try {
+      const types = await apiClient.getTypesCadastre();
+      this.typesCadastre = types;
+      await p.setKV(StorageKeys.TYPES_CADASTRE, types);
     } catch {
       /* garde le cache */
     }

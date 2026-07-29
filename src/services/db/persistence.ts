@@ -60,6 +60,8 @@ export const StorageKeys = {
   // Référentiels mesures (espèces / maladies) mis en cache pour l'offline.
   ESPECES: 'especes',
   MALADIES: 'maladies',
+  // Types de zone cadastrale, administrés depuis la console.
+  TYPES_CADASTRE: 'types_cadastre',
   // Préférences de l'agent sur CET appareil (thème, notifications). Elles ne
   // partent pas au serveur : elles décrivent l'appareil, pas le compte.
   PREFERENCES: 'preferences',

@@ -265,6 +265,17 @@ export const STATUT_COLLECTE_LABELS: Record<StatutCollecte, string> = {
 };
 
 /** Unité de l'estimation de production — valeurs fermées (colonne texte). */
+/**
+ * Type de zone cadastrale — liste administrée depuis la console, mise en cache
+ * pour rester disponible hors-ligne. Remplace la saisie libre du Bloc C.
+ */
+export interface TypeCadastre {
+  id: string;
+  nom: string;
+  ordre: number;
+  actif: boolean;
+}
+
 export enum UniteProduction {
   KG_PAR_TRAITE = 'KG_PAR_TRAITE',
   KG_PAR_AN = 'KG_PAR_AN',
