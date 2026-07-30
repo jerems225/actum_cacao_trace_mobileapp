@@ -651,6 +651,10 @@ class OfflineStorageService {
       maladieId: m.maladieId,
       maladieLibre: m.maladieLibre,
       photoMaladie: m.photoMaladie,
+      // Sans cette ligne, la photo exigée à l'agent au-delà du seuil restait
+      // sur l'appareil et n'atteignait jamais la base : une preuve demandée
+      // pour rien.
+      photoCirconference: m.photoCirconference,
     };
   }
 

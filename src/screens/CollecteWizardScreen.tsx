@@ -21,13 +21,19 @@ import type { ManualPointValues } from '../components/GPS/PlacettePointsCapture'
 import { colors, useResponsive } from '../theme';
 import { createStyles } from './collecte/collecte.styles';
 import {
+  CATEGORIE_LABELS,
   CLE_AUTRE,
   DERNIERE_ETAPE,
   DISTANCE_MIN_POINTS_M,
   DRAFT_VIDE,
   ETAPES,
   libellePoint,
+  MAX_CACAO_MESURES_SP,
+  SP_RELEVE_EXHAUSTIF,
+  versCategorie,
+  versModele,
   VOLET_VIDE,
+  type CategorieSujet,
   type EtapeCollecte,
   type MesureCollectee,
   type MesureDraft,
@@ -339,6 +345,18 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   // jamais recopier les valeurs d'une autre sous-placette.
   const [draftsBySP, setDraftsBySP] = useState<Record<number, MesureDraft>>({});
 
+  /**
+   * Effectif de cacaoyers SAISI par sous-placette, en chaîne tant que l'agent
+   * tape (conversion à l'enregistrement, comme partout ailleurs).
+   *
+   * Ne concerne que SP2 à SP6 : trois cacaoyers y sont mesurés, pas davantage,
+   * et le compte déduit des mesures y plafonnerait donc à trois — très en
+   * dessous de la réalité du verger. SP1, où le relevé est exhaustif, garde son
+   * compte déduit : y ouvrir une saisie rouvrirait la contradiction entre le
+   * chiffre annoncé et les sujets réellement relevés.
+   */
+  const [cacaoDeclareBySP, setCacaoDeclareBySP] = useState<Record<number, string>>({});
+
   const draft = draftsBySP[selectedSP] ?? DRAFT_VIDE;
   const patchDraft = (patch: Partial<MesureDraft>) =>
     setDraftsBySP((prev) => ({
@@ -346,14 +364,19 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       [selectedSP]: { ...(prev[selectedSP] ?? DRAFT_VIDE), ...patch },
     }));
 
-  const isCacao = draft.typeSujet === TypeSujet.CACAO;
+  const isCacao = draft.categorie === 'CACAO';
+
+  /**
+   * Mesure en cours de CORRECTION, par son index dans `mesuresCollectees`.
+   *
+   * `null` = le formulaire ajoute un nouveau sujet. Sinon il réécrit celui-là :
+   * on ne pouvait jusqu'ici que supprimer une mesure et la refaire entièrement,
+   * ce qui coûtait toute la saisie pour un chiffre mal tapé.
+   */
+  const [mesureEnEdition, setMesureEnEdition] = useState<number | null>(null);
 
   /** Fenêtre de relecture et de correction des mesures de la SP courante. */
   const [modaleMesuresOuverte, setModaleMesuresOuverte] = useState(false);
-
-  // --- Bloc E : arbres n'émettant pas d'ombre ---
-  const [especeNonEmettrice, setEspeceNonEmettrice] = useState<string | null>(null);
-  const [especeNonEmettriceAutre, setEspeceNonEmettriceAutre] = useState('');
 
   /** La plus grande des deux circonférences saisies — commande la photo. */
   const circonferenceMaxSaisie = Math.max(
@@ -366,24 +389,28 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   ).length;
 
   /**
-   * Comptages DÉDUITS des mesures relevées, et non plus tapés à la main.
+   * Comptages DÉDUITS des mesures relevées, par sous-placette.
    *
-   * Deux chiffres saisis séparément finissaient toujours par se contredire :
-   * l'agent annonçait 120 cacaoyers puis en relevait 118, et rien ne disait
-   * lequel faisait foi. Le compte suit maintenant ce qui a été effectivement
-   * enregistré. Les cacaoyers ne comptent que VIVANTS — un sujet mort n'entre
-   * pas dans l'effectif du verger, il est relevé pour la statistique sanitaire.
+   * Les cacaoyers ne comptent que VIVANTS — un sujet mort n'entre pas dans
+   * l'effectif du verger, il est relevé pour la statistique sanitaire. Les
+   * arbres d'ombrage et les autres arbres sont comptés séparément : mêler les
+   * seconds aux premiers gonflerait le couvert d'ombrage de sujets qui n'en
+   * produisent pas.
    */
   const compteursSP = useMemo(() => {
-    const parSP: Record<number, { cacaoVivants: number; arbres: number }> = {};
+    const parSP: Record<
+      number,
+      { cacaoVivants: number; cacaoMesures: number; arbres: number; autresArbres: number }
+    > = {};
     for (const m of mesuresCollectees) {
-      const c = parSP[m.numeroSP] ?? { cacaoVivants: 0, arbres: 0 };
+      const c =
+        parSP[m.numeroSP] ?? { cacaoVivants: 0, cacaoMesures: 0, arbres: 0, autresArbres: 0 };
       if (m.typeSujet === TypeSujet.CACAO) {
+        c.cacaoMesures += 1;
         if (m.etatSanitaire === EtatSanitaire.VIVANT) c.cacaoVivants += 1;
-      } else if (m.emetOmbre !== false) {
-        // Les arbres qui n'émettent pas d'ombre sont recensés à part (bloc
-        // suivant) : les compter ici gonflerait le couvert d'ombrage de la
-        // sous-placette avec des sujets qui n'en produisent pas.
+      } else if (m.emetOmbre === false) {
+        c.autresArbres += 1;
+      } else {
         c.arbres += 1;
       }
       parSP[m.numeroSP] = c;
@@ -392,16 +419,20 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   }, [mesuresCollectees]);
 
   /**
-   * Arbres n'émettant pas d'ombre, recensés pour la placette entière.
+   * Effectif de cacaoyers retenu pour une sous-placette.
    *
-   * Ils sont rattachés à SP1 par convention : le modèle exige une
-   * sous-placette, et le recensement de la placette y est déjà porté. Ce qui
-   * les distingue n'est pas leur rattachement mais `emetOmbre: false`.
+   * Une seule fonction pour les deux régimes, afin que l'écran, l'enregistrement
+   * et les contrôles ne puissent pas répondre différemment à la même question :
+   *   — SP1 : le relevé est exhaustif, le compte déduit fait foi ;
+   *   — SP2 à SP6 : la saisie de l'agent fait foi. À défaut de saisie, on
+   *     retombe sur le compte déduit plutôt que sur zéro — un effectif nul
+   *     rendrait la sous-placette invisible dans les densités.
    */
-  const arbresNonEmetteurs = useMemo(
-    () => mesuresCollectees.filter((m) => m.typeSujet !== TypeSujet.CACAO && m.emetOmbre === false),
-    [mesuresCollectees],
-  );
+  const effectifCacao = (numeroSP: number): number => {
+    const deduit = compteursSP[numeroSP]?.cacaoVivants ?? 0;
+    if (numeroSP === SP_RELEVE_EXHAUSTIF) return deduit;
+    return parseNombre(cacaoDeclareBySP[numeroSP] ?? '') ?? deduit;
+  };
 
   /**
    * Maladies proposées : le référentiel serveur dès qu'il est synchronisé,
@@ -535,90 +566,137 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       libelleConfirmer: 'Supprimer',
       destructif: true,
     });
-    if (ok) setMesuresCollectees((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  /**
-   * Ajoute un arbre n'émettant pas d'ombre au recensement de la placette.
-   *
-   * Volontairement plus léger que le Bloc D : ni circonférence, ni hauteur, ni
-   * état sanitaire. Ce bloc répond à une question de dénombrement — combien
-   * d'arbres de ce type, et lesquels — et non à un relevé dendrométrique.
-   * Demander les mêmes champs qu'au Bloc D en découragerait la saisie.
-   */
-  const ajouterArbreNonEmetteur = () => {
-    let especeNom: string | undefined;
-    let especeIdVal: string | undefined;
-    let especeLibreVal: string | undefined;
-
-    if (especeNonEmettrice === CLE_AUTRE) {
-      if (!especeNonEmettriceAutre.trim()) {
-        toast.error("Précisez le nom de l'espèce.");
-        return;
-      }
-      especeLibreVal = especeNonEmettriceAutre.trim();
-      especeNom = especeLibreVal;
-    } else if (especeNonEmettrice?.startsWith('id:')) {
-      const id = especeNonEmettrice.slice(3);
-      especeIdVal = id;
-      especeNom = especes.find((e) => e.id === id)?.nom;
-    } else {
-      toast.error("Sélectionnez l'espèce de l'arbre.");
-      return;
-    }
-
-    setMesuresCollectees((prev) => [
-      ...prev,
-      {
-        // SP1 par convention : la placette entière est recensée là.
-        numeroSP: 1,
-        typeSujet: TypeSujet.ARBRE_OMBRAGE,
-        espece: especeNom,
-        especeId: especeIdVal,
-        especeLibre: especeLibreVal,
-        // C'est CE drapeau qui range l'arbre au bloc E plutôt qu'au bloc D.
-        emetOmbre: false,
-        etatSanitaire: EtatSanitaire.VIVANT,
-      },
-    ]);
-
-    // On garde l'espèce sélectionnée : l'agent en recense souvent plusieurs de
-    // la même essence à la suite, un appui suffit alors pour la suivante.
-    setEspeceNonEmettriceAutre('');
-  };
-
-  /**
-   * Retire UN arbre de l'espèce donnée (le dernier ajouté).
-   *
-   * Le récapitulatif étant groupé, on ne peut pas désigner une ligne précise :
-   * on décrémente. Sans confirmation, à la différence d'une mesure du Bloc D —
-   * ici rien n'est perdu qu'un appui ne rétablisse.
-   */
-  const retirerUnArbreNonEmetteur = (nomEspece: string) => {
-    setMesuresCollectees((prev) => {
-      const correspond = (m: MesureCollectee) =>
-        m.typeSujet !== TypeSujet.CACAO &&
-        m.emetOmbre === false &&
-        (m.espece ?? 'Espèce non précisée') === nomEspece;
-
-      const dernier = prev.map(correspond).lastIndexOf(true);
-      if (dernier < 0) return prev;
-      return prev.filter((_, i) => i !== dernier);
+    if (!ok) return;
+    setMesuresCollectees((prev) => prev.filter((_, i) => i !== index));
+    // Les index se décalent après un retrait : une correction en cours pointerait
+    // alors sur le voisin. On la referme plutôt que de réécrire le mauvais sujet.
+    setMesureEnEdition((enCours) => {
+      if (enCours === null) return null;
+      if (enCours === index) return null;
+      return enCours > index ? enCours - 1 : enCours;
     });
   };
 
+  /**
+   * Ouvre une mesure déjà enregistrée en CORRECTION.
+   *
+   * Le formulaire de saisie est réutilisé tel quel, rempli des valeurs relevées :
+   * corriger et saisir sont le même geste, il n'y a pas de raison d'apprendre
+   * deux écrans. Jusqu'ici seule la suppression existait — un chiffre mal tapé
+   * coûtait donc toute la mesure à refaire.
+   */
+  const modifierMesure = (index: number) => {
+    const m = mesuresCollectees[index];
+    if (!m) return;
+
+    // La clé de l'espèce revient à sa forme de liste (`id:<uuid>`) quand
+    // l'espèce vient du référentiel, sinon à « Autres » + le nom saisi.
+    const especeKey = m.especeId ? `id:${m.especeId}` : m.especeLibre ? CLE_AUTRE : null;
+    // Même logique pour la maladie, avec sa troisième forme : `nom:` pour une
+    // option du repli hors-ligne, qui n'a pas d'identifiant local.
+    const maladieKey = m.maladieId
+      ? `id:${m.maladieId}`
+      : m.maladieLibre
+        ? maladiesList.some((x) => x.nom === m.maladieLibre)
+          ? `nom:${m.maladieLibre}`
+          : CLE_AUTRE
+        : null;
+
+    setSelectedSP(m.numeroSP);
+    setDraftsBySP((prev) => ({
+      ...prev,
+      [m.numeroSP]: {
+        categorie: versCategorie(m),
+        circo30: m.circonference30cm != null ? String(m.circonference30cm) : '',
+        circo130: m.circonferenceDBH != null ? String(m.circonferenceDBH) : '',
+        photoCirconference: m.photoCirconference ?? null,
+        hauteurFut: m.hauteurFut != null ? String(m.hauteurFut) : '',
+        hauteur: m.hauteurTotale != null ? String(m.hauteurTotale) : '',
+        etatSanitaire: m.etatSanitaire,
+        especeKey,
+        especeAutre: especeKey === CLE_AUTRE ? m.especeLibre ?? '' : '',
+        maladieKey,
+        maladieAutre: maladieKey === CLE_AUTRE ? m.maladieLibre ?? '' : '',
+        photoMaladie: m.photoMaladie ?? null,
+      },
+    }));
+    setMesureEnEdition(index);
+    setModaleMesuresOuverte(false);
+    // Retour au formulaire : la correction peut être lancée depuis l'onglet
+    // Comptage, où le formulaire n'est pas à l'écran.
+    setCurrentStep(5);
+  };
+
+  /**
+   * Abandonne la correction en cours et vide le brouillon.
+   * Le sujet enregistré reste tel qu'il était : rien n'a encore été réécrit.
+   */
+  const annulerEdition = () => {
+    setMesureEnEdition(null);
+    patchDraft({ ...DRAFT_VIDE });
+  };
+
+  /**
+   * Changement de sous-placette.
+   *
+   * Une correction en cours est abandonnée. Elle porte sur un sujet précis d'une
+   * sous-placette précise ; la poursuivre depuis une autre aurait réécrit la
+   * mesure d'origine avec les valeurs d'un autre brouillon, en la DÉPLAÇANT au
+   * passage vers la sous-placette affichée. Personne n'aurait demandé ça, et
+   * rien à l'écran ne l'aurait annoncé.
+   */
+  const changerSP = (numeroSP: number) => {
+    if (numeroSP === selectedSP) return;
+    if (mesureEnEdition !== null) {
+      setMesureEnEdition(null);
+      // Le brouillon rempli par la correction est vidé, sinon les valeurs du
+      // sujet corrigé traîneraient dans la sous-placette qu'on quitte.
+      setDraftsBySP((prev) => ({ ...prev, [selectedSP]: { ...DRAFT_VIDE } }));
+      toast.info('Correction abandonnée : vous avez changé de sous-placette.');
+    }
+    setSelectedSP(numeroSP);
+  };
+
   const handleAddMesure = () => {
-    // Règle SP2-6 : 3 cacaoyers maximum (SP1 illimité).
-    if (isCacao && selectedSP !== 1 && cacaoCountForSP >= 3) {
-      toast.error('Maximum 3 cacaoyers par sous-placette (SP2 à SP6).');
+    // Une correction ne vaut que pour le sujet qu'elle a ouvert, dans SA
+    // sous-placette. Si l'affichage a changé de sous-placette entre-temps par un
+    // chemin qu'on n'a pas prévu, on refuse d'écrire plutôt que de réécrire —
+    // et de déplacer — le mauvais sujet.
+    const cible = mesureEnEdition !== null ? mesuresCollectees[mesureEnEdition] : undefined;
+    if (mesureEnEdition !== null && cible?.numeroSP !== selectedSP) {
+      setMesureEnEdition(null);
+      toast.error(
+        'La correction ne portait pas sur cette sous-placette : elle a été abandonnée. ' +
+          'Rouvrez le sujet à corriger depuis sa liste.',
+      );
       return;
     }
+    const enCorrection = mesureEnEdition !== null;
+
+    // Échantillon SP2-6 : trois cacaoyers mesurés, pas davantage (SP1 relève
+    // tout). La règle ne s'applique pas à une correction : réécrire le troisième
+    // sujet n'en ajoute pas un quatrième.
+    if (
+      isCacao &&
+      !enCorrection &&
+      selectedSP !== SP_RELEVE_EXHAUSTIF &&
+      cacaoCountForSP >= MAX_CACAO_MESURES_SP
+    ) {
+      toast.error(
+        `Maximum ${MAX_CACAO_MESURES_SP} cacaoyers mesurés par sous-placette (SP2 à SP6). ` +
+          "Renseignez le nombre total dans l'onglet « Comptage ».",
+      );
+      return;
+    }
+
+    // La catégorie choisie à l'écran donne le type stocké ET le drapeau qui
+    // sépare arbres d'ombrage et autres arbres.
+    const { typeSujet: typeSujetVal, emetOmbre: emetOmbreVal } = versModele(draft.categorie);
 
     // Espèce obligatoire pour un arbre (liste ou « autre »).
     let especeNom: string | undefined;
     let especeIdVal: string | undefined;
     let especeLibreVal: string | undefined;
-    let emetOmbreVal: boolean | undefined;
     if (!isCacao) {
       if (draft.especeKey === CLE_AUTRE) {
         if (!draft.especeAutre.trim()) {
@@ -627,17 +705,11 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         }
         especeLibreVal = draft.especeAutre.trim();
         especeNom = especeLibreVal;
-        // « Autres » se saisit dans l'onglet « Arbre d'ombrage » : l'agent y
-        // décrit une essence d'ombrage absente de la liste. La classer non
-        // émettrice l'aurait fait disparaître des couverts recensés — et les
-        // arbres qui n'émettent pas d'ombre ont leur propre comptage.
-        emetOmbreVal = true;
       } else if (draft.especeKey?.startsWith('id:')) {
         const id = draft.especeKey.slice(3);
         const e = especes.find((x) => x.id === id);
         especeIdVal = id;
         especeNom = e?.nom;
-        emetOmbreVal = e?.emetOmbre;
       } else {
         toast.error("Sélectionnez l'espèce de l'arbre.");
         return;
@@ -665,8 +737,13 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       return;
     }
 
+    // La hauteur du fût ne se relève que sur un ARBRE : un cacaoyer se ramifie
+    // dès la base, la notion n'a pas de sens pour lui. Une valeur restée dans le
+    // brouillon après un changement de catégorie est donc ignorée, pas transmise.
+    const futSaisi = isCacao ? '' : draft.hauteurFut;
+
     const erreurHauteur =
-      verifieBorne(draft.hauteurFut, LIMITES.hauteurM, 'Hauteur du fût') ??
+      verifieBorne(futSaisi, LIMITES.hauteurM, 'Hauteur du fût') ??
       verifieBorne(draft.hauteur, LIMITES.hauteurM, 'Hauteur totale');
     if (erreurHauteur) {
       toast.error(erreurHauteur);
@@ -674,7 +751,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     }
 
     // Le fût ne peut pas dépasser la hauteur totale : c'en est une partie.
-    const fut = parseNum(draft.hauteurFut);
+    const fut = parseNum(futSaisi);
     const totale = parseNum(draft.hauteur);
     if (fut !== undefined && totale !== undefined && fut > totale) {
       toast.error('La hauteur du fût ne peut pas dépasser la hauteur totale.');
@@ -711,32 +788,46 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       }
     }
 
-    setMesuresCollectees((prev) => [
-      ...prev,
-      {
-        numeroSP: selectedSP,
-        typeSujet: draft.typeSujet,
-        espece: especeNom,
-        especeId: especeIdVal,
-        especeLibre: especeLibreVal,
-        emetOmbre: emetOmbreVal,
-        // Les deux circonférences partent ensemble, toutes deux en centimètres.
-        circonference30cm: parseNum(draft.circo30),
-        circonferenceDBH: parseNum(draft.circo130),
-        hauteurFut: parseNum(draft.hauteurFut),
-        hauteurTotale: parseNum(draft.hauteur),
-        etatSanitaire: etatRetenu,
-        maladieId: maladieIdVal,
-        maladieLibre: maladieLibreVal,
-        photoMaladie:
-          etatRetenu === EtatSanitaire.MALADE ? draft.photoMaladie ?? undefined : undefined,
-        photoCirconference: draft.photoCirconference ?? undefined,
-      },
-    ]);
+    const mesure: MesureCollectee = {
+      numeroSP: selectedSP,
+      typeSujet: typeSujetVal,
+      espece: especeNom,
+      especeId: especeIdVal,
+      especeLibre: especeLibreVal,
+      emetOmbre: emetOmbreVal,
+      // Les deux circonférences partent ensemble, toutes deux en centimètres.
+      circonference30cm: parseNum(draft.circo30),
+      circonferenceDBH: parseNum(draft.circo130),
+      hauteurFut: fut,
+      hauteurTotale: totale,
+      etatSanitaire: etatRetenu,
+      maladieId: maladieIdVal,
+      maladieLibre: maladieLibreVal,
+      photoMaladie:
+        etatRetenu === EtatSanitaire.MALADE ? draft.photoMaladie ?? undefined : undefined,
+      photoCirconference: draft.photoCirconference ?? undefined,
+    };
+
+    if (enCorrection) {
+      // Réécriture sur place. L'identifiant local est CONSERVÉ : c'est lui qui
+      // fera modifier la mesure en base au lieu d'en créer une seconde, et qui
+      // évite donc de compter deux fois le même arbre (voir storage.diffMesures).
+      setMesuresCollectees((prev) =>
+        prev.map((ancienne, i) =>
+          i === mesureEnEdition ? { ...mesure, id: ancienne.id } : ancienne,
+        ),
+      );
+      setMesureEnEdition(null);
+      patchDraft({ ...DRAFT_VIDE, categorie: draft.categorie });
+      toast.success('Mesure corrigée.');
+      return;
+    }
+
+    setMesuresCollectees((prev) => [...prev, mesure]);
     // Vide le brouillon de CETTE sous-placette pour la mesure suivante, en
-    // conservant le type de sujet et l'unité (mode lot : l'agent enchaîne les
-    // cacaoyers, puis les arbres).
-    patchDraft({ ...DRAFT_VIDE, typeSujet: draft.typeSujet });
+    // conservant la catégorie (mode lot : l'agent enchaîne les cacaoyers, puis
+    // les arbres d'ombrage, puis les autres).
+    patchDraft({ ...DRAFT_VIDE, categorie: draft.categorie });
   };
 
   /** Affiche l'erreur en inline (sous le formulaire) et en toast. */
@@ -795,11 +886,22 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
     if (mesuresCollectees.length === 0) {
       manque.push('Au moins une mesure dendrométrique (Bloc D)');
     }
-    // SP1 porte le recensement des cacaoyers de la placette. Le compte étant
-    // déduit des mesures, on vérifie qu'il y a bien des cacaoyers relevés —
+    // SP1 porte le relevé exhaustif des cacaoyers de la placette. Le compte y
+    // étant déduit des mesures, on vérifie qu'il y a bien des cacaoyers relevés —
     // et non plus qu'un nombre a été tapé.
-    if ((compteursSP[1]?.cacaoVivants ?? 0) === 0) {
+    if ((compteursSP[SP_RELEVE_EXHAUSTIF]?.cacaoVivants ?? 0) === 0) {
       manque.push('SP1 — aucun cacaoyer vivant relevé (Bloc D)');
+    }
+    // SP2 à SP6 : trois cacaoyers y sont mesurés seulement. Sans l'effectif
+    // saisi, la sous-placette compterait trois cacaoyers au lieu des dizaines
+    // qu'elle porte, et toutes les densités calculées en aval seraient fausses.
+    // On ne le demande que là où l'agent a effectivement relevé du cacao : une
+    // sous-placette sans cacaoyer n'a pas d'effectif à déclarer.
+    for (const numeroSP of [2, 3, 4, 5, 6]) {
+      const aDuCacao = (compteursSP[numeroSP]?.cacaoMesures ?? 0) > 0;
+      if (aDuCacao && !(cacaoDeclareBySP[numeroSP] ?? '').trim()) {
+        manque.push(`SP${numeroSP} — nombre de cacaoyers présents (onglet Comptage)`);
+      }
     }
 
     return manque;
@@ -830,8 +932,20 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       }
     }
 
-    // Les comptages ne sont plus saisis : ils comptent des mesures réellement
-    // enregistrées et ne peuvent donc plus sortir de leurs bornes.
+    // Effectifs de cacaoyers saisis sur SP2 à SP6. Les autres comptages sont
+    // déduits des mesures et ne peuvent pas sortir de leurs bornes.
+    for (const numeroSP of [2, 3, 4, 5, 6]) {
+      const err = verifieBorne(
+        cacaoDeclareBySP[numeroSP] ?? '',
+        LIMITES.comptageSP,
+        `SP${numeroSP} — nombre de cacaoyers présents`,
+      );
+      if (err) {
+        setSelectedSP(numeroSP);
+        return err;
+      }
+    }
+
     return null;
   };
 
@@ -870,11 +984,15 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
   };
 
   const buildSousPlacettes = (): SousPlacetteLocal[] => {
-    // Une sous-placette existe dès qu'elle porte au moins une mesure. Les
-    // compteurs n'étant plus saisis à part, il n'y a plus de SP « vide mais
-    // renseignée » : le relevé fait foi.
+    // Une sous-placette existe dès qu'elle porte au moins une mesure, OU un
+    // effectif de cacaoyers saisi. Ce second cas est réel sur le terrain : un
+    // agent peut compter les cacaoyers d'une sous-placette avant d'en mesurer
+    // trois, et le compte ne doit pas être perdu entre-temps.
     const spNums = new Set<number>();
     mesuresCollectees.forEach((m) => spNums.add(m.numeroSP));
+    for (const [numero, saisi] of Object.entries(cacaoDeclareBySP)) {
+      if (saisi.trim()) spNums.add(Number(numero));
+    }
 
     // Approximation : la sous-placette hérite des 3 premiers sommets de la
     // placette (échantillon interne) tant que la capture GPS dédiée par
@@ -885,8 +1003,13 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
       id: '',
       placetteId: '',
       numero,
-      // Comptes déduits des mesures : ils ne peuvent plus contredire le relevé.
-      nombrePlantsCacao: compteursSP[numero]?.cacaoVivants ?? 0,
+      // Effectif de cacaoyers : déduit sur SP1 (relevé exhaustif), saisi par
+      // l'agent sur SP2 à SP6 où seuls trois sujets sont mesurés.
+      nombrePlantsCacao: effectifCacao(numero),
+      // Arbres d'ombrage : toujours déduit, ils sont tous mesurés. Les « autres
+      // arbres » n'entrent pas dans ce compte — ils ne produisent pas d'ombre et
+      // les mêler ici gonflerait le couvert de la sous-placette. Ils restent
+      // dénombrables à la lecture par leur drapeau `emetOmbre: false`.
       nombreArbres: compteursSP[numero]?.arbres ?? 0,
       sommets: sommetsOnly.slice(0, 3),
       mesures: mesuresCollectees
@@ -909,6 +1032,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           maladieId: m.maladieId,
           maladieLibre: m.maladieLibre,
           photoMaladie: m.photoMaladie,
+          photoCirconference: m.photoCirconference,
           createdAt: new Date().toISOString(),
         })),
     }));
@@ -1282,11 +1406,19 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 
         // Bloc D : les mesures, en conservant l'identifiant local de chacune —
         // c'est lui qui permettra de la modifier plutôt que d'en créer une
-        // nouvelle. Les compteurs de la sous-placette ne sont PAS relus : ils
-        // se recalculent à partir des mesures rechargées, et repartir de la
-        // valeur stockée risquerait de figer un chiffre devenu faux.
+        // nouvelle.
+        //
+        // Les comptages DÉDUITS (arbres d'ombrage, cacaoyers de SP1) ne sont pas
+        // relus : ils se recalculent à partir des mesures rechargées, et repartir
+        // de la valeur stockée figerait un chiffre devenu faux. L'effectif SAISI
+        // de SP2 à SP6, lui, DOIT être relu — il ne se déduit de rien, et le
+        // perdre à la reprise obligerait l'agent à retourner compter le verger.
         const mesures: MesureCollectee[] = [];
+        const effectifsSaisis: Record<number, string> = {};
         for (const sp of plc.sousPlacettes ?? []) {
+          if (sp.numero !== SP_RELEVE_EXHAUSTIF && sp.nombrePlantsCacao != null) {
+            effectifsSaisis[sp.numero] = String(sp.nombrePlantsCacao);
+          }
           for (const m of sp.mesures ?? []) {
             mesures.push({
               id: m.id,
@@ -1304,10 +1436,12 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               maladieId: m.maladieId,
               maladieLibre: m.maladieLibre,
               photoMaladie: m.photoMaladie,
+              photoCirconference: m.photoCirconference,
             });
           }
         }
         setMesuresCollectees(mesures);
+        setCacaoDeclareBySP(effectifsSaisis);
       }
 
       setChargementEdition(false);
@@ -2036,9 +2170,25 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         {/* BLOC D */}
         {currentStep === 5 && (
           <View style={styles.stepCard}>
-            <Text style={styles.blocSub}>Comptage et circonférence par sous-placette</Text>
+            <Text style={styles.blocSub}>
+              Un relevé par sujet. Les comptes se lisent dans l'onglet « Comptage ».
+            </Text>
 
-            <Text style={styles.inputLabel}>Sous-placette Échantillon</Text>
+            {/* Bandeau de correction : quand l'agent réécrit un sujet déjà
+                enregistré, l'écran doit le dire. Sans lui, un formulaire prérempli
+                laisse croire à une saisie neuve, et « Ajouter » semble en créer
+                un second. */}
+            {mesureEnEdition !== null && (
+              <View style={styles.editionBandeau}>
+                <Ionicons name="create-outline" size={16} color={colors.emeraldPrimary} />
+                <Text style={styles.editionBandeauTexte}>
+                  Correction d'un sujet déjà relevé sur SP{selectedSP}. Modifiez ce qui doit
+                  l'être, puis enregistrez.
+                </Text>
+              </View>
+            )}
+
+            <Text style={styles.labelBloc}>Sous-placette Échantillon</Text>
             <View style={styles.spSelector}>
               {[1, 2, 3, 4, 5, 6].map((num) => {
                 const count = mesuresCollectees.filter((m) => m.numeroSP === num).length;
@@ -2046,7 +2196,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   <TouchableOpacity
                     key={num}
                     style={[styles.spButton, selectedSP === num && styles.spButtonActive]}
-                    onPress={() => setSelectedSP(num)}
+                    onPress={() => changerSP(num)}
                   >
                     <Text style={[styles.spText, selectedSP === num && styles.spTextActive]}>
                       SP{num}
@@ -2057,47 +2207,73 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               })}
             </View>
 
+            {/* Nature du sujet — TROIS choix, dans chaque sous-placette.
+                Les « autres arbres » avaient leur propre étape, rattachés à SP1
+                par convention : l'agent devait quitter la sous-placette où il se
+                trouvait pour signaler un arbre qu'il avait sous les yeux, et le
+                relevé perdait l'endroit où l'arbre pousse. C'est la même
+                question que les deux autres — elle se pose donc au même
+                endroit. */}
+            <Text style={styles.labelBloc}>Nature du sujet</Text>
             <View style={styles.typeSelector}>
-              <TouchableOpacity
-                style={[styles.typeBtn, isCacao && styles.typeBtnActive]}
-                // Le changement de type vide ce qui ne s'applique plus : la
-                // grosseur (cm ↔ DBH en m, unités différentes) et l'espèce, qui
-                // ne concerne que les arbres.
-                onPress={() =>
-                  patchDraft({
-                    typeSujet: TypeSujet.CACAO,
-                    especeKey: null,
-                    especeAutre: '',
-                  })
-                }
-              >
-                <Ionicons name="cube-outline" size={14} color={isCacao ? '#FFF' : colors.textPrimary} />
-                <Text style={[styles.typeBtnText, isCacao && styles.typeBtnTextActive]}>
-                  Cacaoyer
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.typeBtn, !isCacao && styles.typeBtnActive]}
-                // Vers un arbre : l'état sanitaire ne s'applique plus, on remet
-                // VIVANT et on efface maladie et photo pour ne rien transmettre
-                // d'un diagnostic saisi sur un cacaoyer.
-                onPress={() =>
-                  patchDraft({
-                    typeSujet: TypeSujet.ARBRE_OMBRAGE,
-                    etatSanitaire: EtatSanitaire.VIVANT,
-                    maladieKey: null,
-                    maladieAutre: '',
-                    photoMaladie: null,
-                  })
-                }
-              >
-                <Ionicons name="sunny-outline" size={14} color={!isCacao ? '#FFF' : colors.textPrimary} />
-                <Text style={[styles.typeBtnText, !isCacao && styles.typeBtnTextActive]}>
-                  Arbre d'ombrage
-                </Text>
-              </TouchableOpacity>
+              {(['CACAO', 'OMBRAGE', 'AUTRE'] as CategorieSujet[]).map((cat) => {
+                const active = draft.categorie === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.typeBtn, active && styles.typeBtnActive]}
+                    // Le changement de catégorie vide ce qui ne s'applique plus :
+                    // l'espèce (les cacaoyers n'en ont pas à choisir) et, vers un
+                    // arbre, tout le diagnostic sanitaire — sans quoi une maladie
+                    // saisie sur un cacaoyer partirait sur un arbre d'ombrage.
+                    onPress={() =>
+                      patchDraft(
+                        cat === 'CACAO'
+                          ? { categorie: cat, especeKey: null, especeAutre: '' }
+                          : {
+                              categorie: cat,
+                              etatSanitaire: EtatSanitaire.VIVANT,
+                              maladieKey: null,
+                              maladieAutre: '',
+                              photoMaladie: null,
+                            },
+                      )
+                    }
+                  >
+                    {/* Ternaire écrit ICI, dans `name={…}`, et non sorti dans une
+                        variable au-dessus : c'est la seule forme que
+                        `scripts/verifier-icones.js` sait relire. Un nom d'icône
+                        absent du glyphmap ne casse ni la compilation ni le
+                        démarrage — l'icône se dessine vide, et on ne le voit
+                        qu'à l'écran. Sorti en variable, il échappait au contrôle.
+                        Bonus : les littéraux se typent seuls, plus de `as never`. */}
+                    <Ionicons
+                      name={
+                        cat === 'CACAO'
+                          ? 'cube-outline'
+                          : cat === 'OMBRAGE'
+                            ? 'sunny-outline'
+                            : 'leaf-outline'
+                      }
+                      size={18}
+                      color={active ? '#FFF' : colors.textPrimary}
+                    />
+                    <Text
+                      style={[styles.typeBtnText, active && styles.typeBtnTextActive]}
+                      numberOfLines={2}
+                    >
+                      {CATEGORIE_LABELS[cat]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+            {draft.categorie === 'AUTRE' && (
+              <Text style={styles.helperText}>
+                Un arbre qui ne produit pas d'ombre sur le cacao. Même relevé qu'un arbre
+                d'ombrage — il est simplement compté à part, car il n'entre pas dans le couvert.
+              </Text>
+            )}
 
             {/* État de santé — juste après le choix du type de sujet, et non en
                 fin de formulaire : c'est ce que l'agent constate en premier en
@@ -2162,7 +2338,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                   </>
                 )}
 
-                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Photo de diagnostic *</Text>
+                <Text style={styles.labelSuivant}>Photo de diagnostic *</Text>
                 {draft.photoMaladie ? (
                   <View style={styles.photoRow}>
                     <Image source={{ uri: draft.photoMaladie }} style={styles.photoThumb} />
@@ -2196,9 +2372,10 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 {draft.especeKey === CLE_AUTRE && (
                   <>
                     <Text style={styles.optionalTag}>
-                      Espèce hors liste — enregistrée comme émettrice d'ombre, puis proposée à
-                      tous après validation par l'administration. Les arbres qui n'émettent pas
-                      d'ombre se comptent séparément, au bloc suivant.
+                      Espèce hors liste — proposée à tous les agents après validation par
+                      l'administration. Son rôle dans le couvert vient de la puce choisie
+                      ci-dessus, pas de la fiche du référentiel : c'est vous, devant l'arbre, qui
+                      savez s'il fait de l'ombre au cacao.
                     </Text>
                     <TextInput
                       style={styles.textInput}
@@ -2276,22 +2453,32 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
               </View>
             )}
 
+            {/* Hauteurs. Le FÛT ne concerne que les arbres : un cacaoyer se
+                ramifie dès la base, il n'a pas de fût à mesurer. Le champ était
+                demandé pour tous, et l'agent devant un cacaoyer n'avait aucune
+                réponse à y mettre. Un cacaoyer n'a donc qu'une hauteur totale,
+                et elle occupe alors toute la largeur — plutôt qu'une colonne
+                vide à côté, qui laisse chercher ce qui manque. */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Hauteurs (m)</Text>
+              <Text style={styles.inputLabel}>
+                {isCacao ? 'Hauteur totale (m)' : 'Hauteurs (m)'}
+              </Text>
               <View style={styles.deuxColonnes}>
+                {!isCacao && (
+                  <View style={styles.colonne}>
+                    <Text style={styles.rubriqueLabel}>Fût</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      keyboardType="decimal-pad"
+                      placeholder="ex: 2.4"
+                      placeholderTextColor={colors.textMuted}
+                      value={draft.hauteurFut}
+                      onChangeText={(t) => patchDraft({ hauteurFut: sanitizeDecimal(t) })}
+                    />
+                  </View>
+                )}
                 <View style={styles.colonne}>
-                  <Text style={styles.rubriqueLabel}>Fût</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    keyboardType="decimal-pad"
-                    placeholder="ex: 2.4"
-                    placeholderTextColor={colors.textMuted}
-                    value={draft.hauteurFut}
-                    onChangeText={(t) => patchDraft({ hauteurFut: sanitizeDecimal(t) })}
-                  />
-                </View>
-                <View style={styles.colonne}>
-                  <Text style={styles.rubriqueLabel}>Totale</Text>
+                  <Text style={styles.rubriqueLabel}>{isCacao ? 'Du sol au sommet' : 'Totale'}</Text>
                   <TextInput
                     style={styles.textInput}
                     keyboardType="decimal-pad"
@@ -2303,54 +2490,65 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
                 </View>
               </View>
               <Text style={styles.helperText}>
-                Le fût va du sol aux premières branches ; il ne peut pas dépasser la hauteur
-                totale.
+                {isCacao
+                  ? "Un cacaoyer se ramifie dès la base : seule sa hauteur totale est relevée."
+                  : 'Le fût va du sol aux premières branches ; il ne peut pas dépasser la hauteur totale.'}
               </Text>
             </View>
 
-            <TouchableOpacity style={styles.addMesureBtn} onPress={handleAddMesure}>
-              <Ionicons name="add-circle-outline" size={16} color={colors.emeraldPrimary} />
+            {/* Action principale. En correction, elle réécrit le sujet ouvert au
+                lieu d'en ajouter un — le libellé doit le dire, sans quoi l'agent
+                croit créer un doublon. */}
+            <TouchableOpacity
+              style={[styles.addMesureBtn, mesureEnEdition !== null && styles.addMesureBtnEdition]}
+              onPress={handleAddMesure}
+            >
+              <Ionicons
+                name={mesureEnEdition !== null ? 'checkmark-circle-outline' : 'add-circle-outline'}
+                size={16}
+                color={colors.emeraldPrimary}
+              />
               <Text style={styles.addMesureText}>
-                Ajouter {isCacao ? 'ce cacaoyer' : 'cet arbre'} à SP{selectedSP}
+                {mesureEnEdition !== null
+                  ? 'Enregistrer la correction'
+                  : `Ajouter ${isCacao ? 'ce cacaoyer' : 'cet arbre'} à SP${selectedSP}`}
               </Text>
             </TouchableOpacity>
-            {isCacao && selectedSP !== 1 && (
-              <Text style={styles.helperText}>{cacaoCountForSP}/3 cacaoyers (maximum SP2–SP6)</Text>
+
+            {mesureEnEdition !== null && (
+              <TouchableOpacity style={styles.annulerEditionBtn} onPress={annulerEdition}>
+                <Ionicons name="close-outline" size={15} color={colors.textSecondary} />
+                <Text style={styles.annulerEditionTexte}>
+                  Abandonner la correction — le sujet reste tel qu'il est
+                </Text>
+              </TouchableOpacity>
             )}
 
-            {/* Comptages DÉDUITS des mesures, en lecture seule. Ils étaient
-                tapés à la main et finissaient par contredire les relevés : un
-                agent annonçait 120 cacaoyers puis en relevait 118, sans qu'on
-                sache lequel croire. */}
-            <View style={[styles.compteursRow, { marginTop: 16 }]}>
-              <View style={styles.compteurCase}>
-                <Text style={styles.compteurValeur}>
-                  {compteursSP[selectedSP]?.cacaoVivants ?? 0}
-                </Text>
-                <Text style={styles.compteurLibelle}>cacaoyers vivants</Text>
-              </View>
-              <View style={styles.compteurCase}>
-                <Text style={styles.compteurValeur}>{compteursSP[selectedSP]?.arbres ?? 0}</Text>
-                <Text style={styles.compteurLibelle}>arbres d'ombrage</Text>
-              </View>
-            </View>
-            <Text style={styles.helperText}>
-              Comptés d'après les mesures enregistrées sur SP{selectedSP}. Les cacaoyers morts ou
-              malades sont relevés mais n'entrent pas dans l'effectif vivant.
-            </Text>
+            {isCacao && selectedSP !== SP_RELEVE_EXHAUSTIF && (
+              <Text style={styles.helperText}>
+                {cacaoCountForSP}/{MAX_CACAO_MESURES_SP} cacaoyers mesurés — l'effectif total de la
+                sous-placette se saisit dans l'onglet « Comptage ».
+              </Text>
+            )}
 
-            {/* Accès au détail : la liste complète vit dans une fenêtre à part.
-                Empilée ici, elle repoussait le formulaire de saisie hors de
-                l'écran dès la dizaine de sujets. */}
+            {/* Accès au détail, IMMÉDIATEMENT sous l'action d'ajout. Il était
+                relégué après les compteurs, en toute fin d'un formulaire long :
+                l'agent qui voulait relire ce qu'il venait d'enregistrer ne
+                trouvait rien, et la liste passait pour absente. La fenêtre
+                séparée reste le bon endroit pour la liste elle-même — empilée
+                ici, elle repousserait la saisie hors de l'écran dès la dizaine
+                de sujets. */}
             {mesuresPourSP.length > 0 && (
               <TouchableOpacity
-                style={styles.addMesureBtn}
+                style={styles.voirMesuresBtn}
                 onPress={() => setModaleMesuresOuverte(true)}
               >
-                <Ionicons name="list-outline" size={16} color={colors.emeraldPrimary} />
-                <Text style={styles.addMesureText}>
-                  Voir et corriger les {mesuresPourSP.length} mesure(s) de SP{selectedSP}
+                <Ionicons name="list-outline" size={16} color={colors.textLight} />
+                <Text style={styles.voirMesuresTexte}>
+                  Voir, modifier ou supprimer les {mesuresPourSP.length} mesure(s) de SP
+                  {selectedSP}
                 </Text>
+                <Ionicons name="chevron-forward-outline" size={16} color={colors.textLight} />
               </TouchableOpacity>
             )}
           </View>
@@ -2364,108 +2562,137 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
           </View>
         )}
 
-        {/* BLOC E — arbres n'émettant pas d'ombre */}
+        {/* ÉTAPE 6 — COMPTAGE. Le résumé des comptes, sous-placette par
+            sous-placette, et la seule saisie de comptage qui reste : l'effectif
+            de cacaoyers de SP2 à SP6.
+
+            Cette page existe pour deux raisons. D'abord parce que les chiffres
+            étaient dispersés au pied du formulaire de saisie, un par
+            sous-placette, sans jamais qu'on puisse lire la placette d'un coup
+            d'œil. Ensuite parce que trois cacaoyers mesurés sur SP2 ne font pas
+            un effectif de trois cacaoyers : le compte réel doit être demandé, et
+            demandé là où l'on parle de comptes. */}
         {currentStep === 6 && (
           <View style={styles.stepCard}>
             <Text style={styles.blocSub}>
-              Les autres arbres présents sur la placette, recensés à part des arbres d'ombrage.
+              Ce qui a été relevé, sous-placette par sous-placette. Les comptes suivent les mesures
+              enregistrées — sauf l'effectif de cacaoyers de SP2 à SP6, que vous saisissez.
             </Text>
 
-            {/* Le compte se fait tout seul : l'agent ajoute les arbres qu'il
-                voit, le total suit. Lui demander en plus de saisir un nombre
-                aurait rouvert la contradiction entre le chiffre annoncé et les
-                sujets réellement recensés. */}
-            <View style={[styles.compteursRow, { marginBottom: 16 }]}>
+            {/* Totaux de la placette d'abord : c'est la lecture qu'on vient
+                chercher. Le détail par sous-placette suit. */}
+            <View style={[styles.compteursRow, { marginBottom: 6 }]}>
               <View style={styles.compteurCase}>
-                <Text style={styles.compteurValeur}>{arbresNonEmetteurs.length}</Text>
-                <Text style={styles.compteurLibelle}>
-                  arbre{arbresNonEmetteurs.length > 1 ? 's' : ''} recensé
-                  {arbresNonEmetteurs.length > 1 ? 's' : ''}
+                <Text style={styles.compteurValeur}>
+                  {[1, 2, 3, 4, 5, 6].reduce((somme, sp) => somme + effectifCacao(sp), 0)}
                 </Text>
+                <Text style={styles.compteurLibelle}>cacaoyers sur la placette</Text>
               </View>
               <View style={styles.compteurCase}>
                 <Text style={styles.compteurValeur}>
-                  {new Set(arbresNonEmetteurs.map((a) => a.espece ?? '—')).size}
+                  {mesuresCollectees.filter((m) => m.typeSujet !== TypeSujet.CACAO).length}
                 </Text>
-                <Text style={styles.compteurLibelle}>espèce(s) différente(s)</Text>
+                <Text style={styles.compteurLibelle}>arbres relevés</Text>
               </View>
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Espèce de l'arbre</Text>
-              <SelectField
-                title="Espèce de l'arbre"
-                placeholder="Choisir dans la liste…"
-                value={especeNonEmettrice}
-                // Toutes les espèces sont proposées, pas seulement celles
-                // marquées non émettrices : le référentiel importé les donne
-                // toutes émettrices par défaut, et c'est l'agent devant l'arbre
-                // qui sait ce qu'il voit. C'est la saisie DANS ce bloc qui vaut
-                // classement, pas la fiche du référentiel.
-                options={especeOptions}
-                onChange={(key) => {
-                  setEspeceNonEmettrice(key);
-                  setEspeceNonEmettriceAutre('');
-                }}
-              />
-              {especeNonEmettrice === CLE_AUTRE && (
-                <>
-                  <Text style={styles.optionalTag}>
-                    Espèce hors liste — proposée à tous les agents après validation par
-                    l'administration.
-                  </Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Nom de l'espèce"
-                    placeholderTextColor={colors.textMuted}
-                    value={especeNonEmettriceAutre}
-                    onChangeText={setEspeceNonEmettriceAutre}
-                  />
-                </>
-              )}
-            </View>
-
-            <TouchableOpacity style={styles.addMesureBtn} onPress={ajouterArbreNonEmetteur}>
-              <Ionicons name="add-circle-outline" size={16} color={colors.emeraldPrimary} />
-              <Text style={styles.addMesureText}>Ajouter cet arbre au recensement</Text>
-            </TouchableOpacity>
             <Text style={styles.helperText}>
-              L'espèce reste sélectionnée après l'ajout : plusieurs arbres de la même essence
-              s'enregistrent d'un appui chacun.
+              Total des six sous-placettes : effectif déduit pour SP1, saisi pour SP2 à SP6.
             </Text>
 
-            {/* Récapitulatif groupé par espèce : c'est la lecture utile — non
-                pas « quarante lignes », mais « douze fromagers, huit tecks ». */}
-            {arbresNonEmetteurs.length > 0 && (
-              <View style={styles.mesuresList}>
-                <Text style={styles.mesuresListTitle}>Recensement par espèce</Text>
-                {Object.entries(
-                  arbresNonEmetteurs.reduce<Record<string, number>>((acc, a) => {
-                    const nom = a.espece ?? 'Espèce non précisée';
-                    acc[nom] = (acc[nom] ?? 0) + 1;
-                    return acc;
-                  }, {}),
-                )
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([nom, nombre]) => (
-                    <View key={nom} style={styles.ligneMesure}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.ligneMesureTitre}>{nom}</Text>
-                        <Text style={styles.ligneMesureDetail}>
-                          {nombre} arbre{nombre > 1 ? 's' : ''}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => retirerUnArbreNonEmetteur(nom)}
-                        accessibilityLabel={`Retirer un ${nom}`}
-                        style={styles.ligneMesureAction}
-                      >
-                        <Ionicons name="remove-circle-outline" size={18} color={colors.error} />
-                      </TouchableOpacity>
+            {[1, 2, 3, 4, 5, 6].map((numeroSP) => {
+              const c = compteursSP[numeroSP];
+              const mesuresSP = mesuresCollectees.filter((m) => m.numeroSP === numeroSP);
+              const exhaustif = numeroSP === SP_RELEVE_EXHAUSTIF;
+              const saisi = cacaoDeclareBySP[numeroSP] ?? '';
+              const declare = parseNum(saisi);
+              const mesures = c?.cacaoMesures ?? 0;
+
+              return (
+                <View key={numeroSP} style={styles.comptageCarte}>
+                  <View style={styles.comptageEntete}>
+                    <Text style={styles.comptageTitre}>SP{numeroSP}</Text>
+                    <Text style={styles.comptageSousTitre}>
+                      {exhaustif ? 'Relevé exhaustif' : `Échantillon de ${MAX_CACAO_MESURES_SP} cacaoyers`}
+                    </Text>
+                  </View>
+
+                  {/* Trois comptes déduits, côte à côte. Les cacaoyers comptés
+                      ici sont ceux effectivement MESURÉS — l'effectif de la
+                      sous-placette est la ligne du dessous. */}
+                  <View style={styles.comptageLignes}>
+                    <View style={styles.comptageLigne}>
+                      <Text style={styles.comptageChiffre}>{mesures}</Text>
+                      <Text style={styles.comptageEtiquette}>cacaoyers mesurés</Text>
                     </View>
-                  ))}
-              </View>
-            )}
+                    <View style={styles.comptageLigne}>
+                      <Text style={styles.comptageChiffre}>{c?.arbres ?? 0}</Text>
+                      <Text style={styles.comptageEtiquette}>arbres d'ombrage</Text>
+                    </View>
+                    <View style={styles.comptageLigne}>
+                      <Text style={styles.comptageChiffre}>{c?.autresArbres ?? 0}</Text>
+                      <Text style={styles.comptageEtiquette}>autres arbres</Text>
+                    </View>
+                  </View>
+
+                  {exhaustif ? (
+                    <Text style={styles.helperText}>
+                      Effectif retenu : {c?.cacaoVivants ?? 0} cacaoyer(s) vivant(s), déduit des
+                      mesures. Tous les cacaoyers de SP1 étant relevés, aucune saisie n'est
+                      demandée — un chiffre tapé à côté ne pourrait que contredire le relevé.
+                    </Text>
+                  ) : (
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Nombre de cacaoyers présents dans SP{numeroSP}</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        keyboardType="number-pad"
+                        placeholder="ex: 42"
+                        placeholderTextColor={colors.textMuted}
+                        value={saisi}
+                        onChangeText={(t) =>
+                          setCacaoDeclareBySP((prev) => ({
+                            ...prev,
+                            [numeroSP]: sanitizeEntier(t, 4),
+                          }))
+                        }
+                      />
+                      {/* Un effectif inférieur au nombre de sujets mesurés est
+                          nécessairement faux : on ne peut pas avoir mesuré plus
+                          d'arbres qu'il n'en existe. On le signale sans bloquer —
+                          l'agent est peut-être en train de taper. */}
+                      {declare !== undefined && declare < mesures ? (
+                        <Text style={styles.comptageAlerte}>
+                          {mesures} cacaoyer(s) ont été mesurés sur SP{numeroSP} : l'effectif ne
+                          peut pas être inférieur.
+                        </Text>
+                      ) : (
+                        <Text style={styles.helperText}>
+                          Comptez tous les cacaoyers de la sous-placette, y compris ceux que vous
+                          n'avez pas mesurés. Sans ce nombre, la placette compterait{' '}
+                          {MAX_CACAO_MESURES_SP} cacaoyers ici au lieu de son effectif réel.
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  {mesuresSP.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.voirMesuresBtn}
+                      onPress={() => {
+                        changerSP(numeroSP);
+                        setModaleMesuresOuverte(true);
+                      }}
+                    >
+                      <Ionicons name="list-outline" size={16} color={colors.textLight} />
+                      <Text style={styles.voirMesuresTexte}>
+                        Voir, modifier ou supprimer les {mesuresSP.length} mesure(s)
+                      </Text>
+                      <Ionicons name="chevron-forward-outline" size={16} color={colors.textLight} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -2583,6 +2810,7 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
         onClose={() => setModaleMesuresOuverte(false)}
         numeroSP={selectedSP}
         mesures={mesuresCollectees}
+        onModifier={modifierMesure}
         onSupprimer={supprimerMesure}
         styles={styles}
       />
@@ -2593,12 +2821,16 @@ export const CollecteWizardScreen: React.FC<CollecteWizardScreenProps> = ({
 /* -------------------------------------------------- Relecture des mesures */
 
 /**
- * Fenêtre de relecture des sujets relevés sur une sous-placette.
+ * Fenêtre de relecture et de correction des sujets relevés sur une sous-placette.
  *
  * Les mesures sont REGROUPÉES par nature — cacaoyers par état sanitaire, puis
- * arbres d'ombrage — et non listées dans l'ordre de saisie. Un agent qui
- * cherche « le cacaoyer mort pourri que je viens d'enregistrer » le trouve
- * dans sa catégorie, au lieu de parcourir quarante lignes identiques.
+ * arbres d'ombrage, puis autres arbres — et non listées dans l'ordre de saisie.
+ * Un agent qui cherche « le cacaoyer mort pourri que je viens d'enregistrer » le
+ * trouve dans sa catégorie, au lieu de parcourir quarante lignes identiques.
+ *
+ * Chaque ligne porte DEUX actions. Seule la suppression existait : un chiffre mal
+ * tapé obligeait à supprimer le sujet et à refaire tout le relevé — circonférences,
+ * hauteurs, état sanitaire et photo comprises.
  *
  * La liste vit dans une fenêtre plutôt que dans la page : empilée sous le
  * formulaire, elle repoussait la saisie hors de l'écran dès la dizaine de
@@ -2609,6 +2841,7 @@ function ModaleMesures({
   onClose,
   numeroSP,
   mesures,
+  onModifier,
   onSupprimer,
   styles,
 }: {
@@ -2616,11 +2849,12 @@ function ModaleMesures({
   onClose: () => void;
   numeroSP: number;
   mesures: MesureCollectee[];
+  onModifier: (indexGlobal: number) => void;
   onSupprimer: (indexGlobal: number) => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  // L'index d'origine est conservé : c'est lui qui désigne la mesure à retirer
-  // dans la liste complète, l'affichage étant réordonné.
+  // L'index d'origine est conservé : c'est lui qui désigne la mesure à corriger
+  // ou à retirer dans la liste complète, l'affichage étant réordonné.
   const avecIndex = mesures
     .map((m, indexGlobal) => ({ m, indexGlobal }))
     .filter(({ m }) => m.numeroSP === numeroSP);
@@ -2634,7 +2868,12 @@ function ModaleMesures({
     })),
     {
       titre: "Arbres d'ombrage",
-      lignes: avecIndex.filter(({ m }) => m.typeSujet !== TypeSujet.CACAO),
+      lignes: avecIndex.filter(({ m }) => versCategorie(m) === 'OMBRAGE'),
+    },
+    {
+      // Comptés à part : ils ne participent pas au couvert d'ombrage.
+      titre: 'Autres arbres',
+      lignes: avecIndex.filter(({ m }) => versCategorie(m) === 'AUTRE'),
     },
   ].filter((g) => g.lignes.length > 0);
 
@@ -2678,6 +2917,17 @@ function ModaleMesures({
                           .join(' • ') || 'Aucune dimension renseignée'}
                       </Text>
                     </View>
+                    {/* Modifier AVANT supprimer, et dans la couleur de l'action
+                        ordinaire : la correction est le geste courant, la
+                        suppression l'exception. L'inverse invitait à supprimer
+                        pour recommencer, faute d'autre issue visible. */}
+                    <TouchableOpacity
+                      onPress={() => onModifier(indexGlobal)}
+                      accessibilityLabel="Modifier cette mesure"
+                      style={styles.ligneMesureAction}
+                    >
+                      <Ionicons name="create-outline" size={17} color={colors.emeraldPrimary} />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => onSupprimer(indexGlobal)}
                       accessibilityLabel="Supprimer cette mesure"

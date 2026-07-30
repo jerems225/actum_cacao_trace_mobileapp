@@ -40,7 +40,10 @@ export const LIMITES = {
    */
   circonference30cmCm: { min: 5, unite: 'cm' },
   circonference130cm: { min: 5, unite: 'cm' },
-  /** Hauteur totale, en mètres. */
+  /**
+   * Hauteurs, en mètres. La hauteur du fût ne concerne que les ARBRES : un
+   * cacaoyer se ramifie dès la base, il n'a qu'une hauteur totale.
+   */
   hauteurM: { min: 0.1, max: 80, unite: 'm' },
   /** Comptages par sous-placette. */
   comptageSP: { min: 0, max: 5_000, unite: '' },
@@ -56,11 +59,20 @@ export type Limite = { min: number; max?: number; unite: string };
 
 /**
  * Au-delà de cette circonférence, la mesure doit être justifiée par une photo.
- * Ce n'est pas un plafond : un sujet de 120 cm existe et doit pouvoir être
+ * Ce n'est pas un plafond : un sujet de 340 cm existe et doit pouvoir être
  * enregistré. La photo sert à distinguer le cas rare de la faute de frappe,
  * sans jamais refuser la donnée.
+ *
+ * Le seuil était à 100 cm, et le terrain le franchissait en routine : la
+ * demande de photo se déclenchait sur des sujets ordinaires, ce qui la vidait
+ * de son sens. La fenêtre de saisie sans justification va donc de 5 à 300 cm.
+ *
+ * ⚠️ Miroir de `SEUIL_PHOTO_CIRCONFERENCE_CM` dans backend/src/schemas/index.ts.
+ * Les deux doivent bouger ENSEMBLE : si le backend exige la photo plus tôt que
+ * le mobile, la mesure part sans preuve et la synchronisation échoue en brousse,
+ * là où personne ne peut la reprendre.
  */
-export const SEUIL_PHOTO_CIRCONFERENCE_CM = 100;
+export const SEUIL_PHOTO_CIRCONFERENCE_CM = 300;
 
 /** Ne laisse passer que des chiffres. Optionnellement borne la longueur. */
 export const sanitizeEntier = (valeur: string, maxChiffres?: number): string => {

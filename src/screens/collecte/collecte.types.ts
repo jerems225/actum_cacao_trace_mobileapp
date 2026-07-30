@@ -35,12 +35,51 @@ export const VOLET_VIDE: VoletDraft = {
 };
 
 /**
+ * Nature du sujet relevé, telle que l'agent la choisit à l'écran.
+ *
+ * Trois choix là où le modèle de données n'a que deux types : « arbre d'ombrage »
+ * et « autre arbre » sont tous deux des `ARBRE_OMBRAGE`, séparés par le seul
+ * drapeau `emetOmbre`. Le protocole ne distingue pas des espèces différentes
+ * mais un RÔLE différent dans le couvert — et c'est l'agent devant l'arbre qui
+ * sait lequel il voit, pas la fiche du référentiel.
+ *
+ * Les « autres arbres » vivaient dans une étape séparée, rattachés à SP1 par
+ * convention. Ils sont désormais relevés dans la sous-placette où ils poussent,
+ * comme les deux autres catégories : c'est la même question posée au même
+ * moment, elle n'a pas à changer d'écran.
+ */
+export type CategorieSujet = 'CACAO' | 'OMBRAGE' | 'AUTRE';
+
+/** Traduit la catégorie choisie à l'écran vers le couple stocké en base. */
+export const versModele = (
+  categorie: CategorieSujet,
+): { typeSujet: TypeSujet; emetOmbre?: boolean } => {
+  if (categorie === 'CACAO') return { typeSujet: TypeSujet.CACAO };
+  return { typeSujet: TypeSujet.ARBRE_OMBRAGE, emetOmbre: categorie === 'OMBRAGE' };
+};
+
+/** Chemin inverse : retrouve la puce à activer pour une mesure déjà enregistrée. */
+export const versCategorie = (m: {
+  typeSujet: TypeSujet;
+  emetOmbre?: boolean;
+}): CategorieSujet => {
+  if (m.typeSujet === TypeSujet.CACAO) return 'CACAO';
+  return m.emetOmbre === false ? 'AUTRE' : 'OMBRAGE';
+};
+
+export const CATEGORIE_LABELS: Record<CategorieSujet, string> = {
+  CACAO: 'Cacaoyer',
+  OMBRAGE: "Arbre d'ombrage",
+  AUTRE: 'Autre arbre',
+};
+
+/**
  * Brouillon de saisie d'UNE mesure, propre à une sous-placette.
  * Chaque SP possède le sien : c'est ce qui garantit que la circonférence tapée
  * pour SP1 ne réapparaît pas dans SP2.
  */
 export interface MesureDraft {
-  typeSujet: TypeSujet;
+  categorie: CategorieSujet;
   /**
    * Les deux circonférences, en CENTIMÈTRES toutes les deux : à 30 cm du sol
    * et à 1,30 m. Elles se relèvent l'une après l'autre sur le même sujet ; les
@@ -55,8 +94,15 @@ export interface MesureDraft {
    * seulement le doute entre le sujet remarquable et la faute de frappe.
    */
   photoCirconference: string | null;
-  /** Hauteur du fût (jusqu'aux premières branches) et hauteur totale, en m. */
+  /**
+   * Hauteur du fût, en m — ARBRES UNIQUEMENT. Un cacaoyer se ramifie dès la
+   * base : la notion n'a pas de sens pour lui, et le protocole ne lui demande
+   * que sa hauteur totale. Le champ reste dans le brouillon pour ne pas perdre
+   * une valeur déjà tapée si l'agent change de catégorie par erreur, mais il
+   * n'est ni affiché ni transmis pour un cacaoyer.
+   */
   hauteurFut: string;
+  /** Hauteur totale, en m. Relevée sur tous les sujets. */
   hauteur: string;
   /** Cacaoyers uniquement : un arbre d'ombrage n'a pas d'état sanitaire relevé. */
   etatSanitaire: EtatSanitaire;
@@ -70,7 +116,7 @@ export interface MesureDraft {
 }
 
 export const DRAFT_VIDE: MesureDraft = {
-  typeSujet: TypeSujet.CACAO,
+  categorie: 'CACAO',
   circo30: '',
   circo130: '',
   photoCirconference: null,
@@ -113,6 +159,7 @@ export interface MesureCollectee {
    * L'écart est visible à l'œil (0,45 contre 45), il n'y a pas d'ambiguïté.
    */
   circonferenceDBH?: number;
+  /** Arbres uniquement — voir `MesureDraft.hauteurFut`. */
   hauteurFut?: number;
   hauteurTotale?: number;
   etatSanitaire: EtatSanitaire;
@@ -122,6 +169,21 @@ export interface MesureCollectee {
   /** Photo justifiant une circonférence supérieure au seuil. */
   photoCirconference?: string;
 }
+
+/**
+ * Nombre MAXIMAL de cacaoyers mesurés sur SP2 à SP6.
+ *
+ * Le protocole y prélève un échantillon de trois sujets, l'effectif réel étant
+ * compté à part (voir `SousPlacetteLocal.nombrePlantsCacao`). SP1 n'est pas
+ * concernée : elle porte le relevé exhaustif de la placette.
+ */
+export const MAX_CACAO_MESURES_SP = 3;
+
+/**
+ * Sous-placette portant le relevé exhaustif des cacaoyers. Sur les autres,
+ * l'agent mesure trois sujets et saisit le nombre présent.
+ */
+export const SP_RELEVE_EXHAUSTIF = 1;
 
 /**
  * Étapes du parcours de saisie.
@@ -147,7 +209,11 @@ export const ETAPES: { step: EtapeCollecte; label: string; titre: string }[] = [
   { step: 3, label: 'Placette', titre: 'Localisation de la placette' },
   { step: 4, label: 'GPS', titre: 'Points GPS de la placette' },
   { step: 5, label: 'Mesures', titre: 'Mesures dendrométriques' },
-  { step: 6, label: 'Autres arbres', titre: "Arbres n'émettant pas d'ombre" },
+  // Remplace l'ancienne étape « Autres arbres », dont le contenu a rejoint le
+  // sélecteur de type du Bloc D : les autres arbres se relèvent maintenant dans
+  // la sous-placette où ils poussent. Cette étape-ci répond à une autre
+  // question — combien, au total, et par sous-placette.
+  { step: 6, label: 'Comptage', titre: 'Résumé des comptes par sous-placette' },
   { step: 7, label: 'Valider', titre: 'Validation de la collecte' },
 ];
 

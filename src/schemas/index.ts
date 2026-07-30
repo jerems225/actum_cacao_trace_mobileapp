@@ -13,7 +13,7 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { LIMITES } from '../utils/champs';
+import { LIMITES, SEUIL_PHOTO_CIRCONFERENCE_CM } from '../utils/champs';
 
 const CI_LAT_MIN = 4.0;
 const CI_LAT_MAX = 10.8;
@@ -117,19 +117,40 @@ export const MesureArbreFormSchema = z
     maladieId: z.string().optional(),
     maladieLibre: z.string().trim().optional(),
     photoMaladie: z.string().optional(),
+    photoCirconference: z.string().optional(),
   })
   .refine((d) => d.typeSujet !== 'ARBRE_OMBRAGE' || !!(d.especeId || d.especeLibre || d.espece), {
     message: "L'espèce est requise pour un arbre",
     path: ['especeId'],
   })
-  .refine((d) => !(d.circonference30cm !== undefined && d.circonferenceDBH !== undefined), {
-    message: 'Une seule mesure de grosseur : circonférence (cm) OU DBH (m)',
-    path: ['circonference30cm'],
+  // Les deux circonférences se relèvent ENSEMBLE sur le même sujet : ce sont
+  // deux points de mesure du protocole, pas deux méthodes concurrentes. Le
+  // schéma les déclarait exclusives, ce qui contredisait la saisie réelle.
+  .refine(
+    (d) =>
+      Math.max(d.circonference30cm ?? 0, d.circonferenceDBH ?? 0) <=
+        SEUIL_PHOTO_CIRCONFERENCE_CM || !!d.photoCirconference,
+    {
+      message: `Au-delà de ${SEUIL_PHOTO_CIRCONFERENCE_CM} cm, une photo du sujet est requise`,
+      path: ['photoCirconference'],
+    },
+  )
+  // La hauteur du fût ne se relève que sur un arbre : un cacaoyer se ramifie
+  // dès la base et n'a qu'une hauteur totale.
+  .refine((d) => d.typeSujet !== 'CACAO' || d.hauteurFut === undefined, {
+    message: "La hauteur du fût ne se relève que sur les arbres",
+    path: ['hauteurFut'],
   })
-  .refine((d) => d.typeSujet !== 'ARBRE_OMBRAGE' || d.circonference30cm === undefined, {
-    message: "Pour un arbre d'ombrage, la grosseur se saisit en DBH (m)",
-    path: ['circonference30cm'],
-  })
+  .refine(
+    (d) =>
+      d.hauteurFut === undefined ||
+      d.hauteurTotale === undefined ||
+      d.hauteurFut <= d.hauteurTotale,
+    {
+      message: 'La hauteur du fût ne peut pas dépasser la hauteur totale',
+      path: ['hauteurFut'],
+    },
+  )
   .refine((d) => d.etatSanitaire !== 'MALADE' || !!(d.maladieId || d.maladieLibre), {
     message: 'La maladie est requise quand le sujet est MALADE',
     path: ['maladieId'],

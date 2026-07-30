@@ -414,7 +414,17 @@ export interface SousPlacetteLocal {
   serverId?: string;
   placetteId: string;
   numero: number;
+  /**
+   * Effectif de cacaoyers de la sous-placette.
+   *
+   * Deux origines selon la sous-placette, et c'est voulu :
+   *   — SP1 : tous les cacaoyers sont mesurés, le compte est DÉDUIT des mesures ;
+   *   — SP2 à SP6 : 3 cacaoyers seulement sont mesurés, l'agent SAISIT donc le
+   *     nombre réellement présent — sans quoi l'effectif de la placette serait
+   *     sous-estimé d'un facteur dépendant de la densité du verger.
+   */
   nombrePlantsCacao?: number;
+  /** Arbres d'ombrage. Toujours déduit : ils sont tous mesurés. */
   nombreArbres?: number;
   sommets: PointGPS[];
   mesures: MesureArbreLocal[];
@@ -429,10 +439,15 @@ export interface MesureArbreLocal {
   espece?: string;
   especeId?: string;
   especeLibre?: string;
+  /**
+   * Arbres : `false` range le sujet dans les « autres arbres », comptés à part
+   * des arbres d'ombrage. C'est ce drapeau — et non le type — qui les sépare.
+   */
   emetOmbre?: boolean;
   estMature?: boolean;
   circonference30cm?: number;
   circonferenceDBH?: number;
+  /** Arbres uniquement : un cacaoyer n'a qu'une hauteur totale. */
   hauteurFut?: number;
   hauteurTotale?: number;
   etatSanitaire: EtatSanitaire;
@@ -440,6 +455,8 @@ export interface MesureArbreLocal {
   maladieId?: string;
   maladieLibre?: string;
   photoMaladie?: string;
+  /** Photo justifiant une circonférence au-delà du seuil de plausibilité. */
+  photoCirconference?: string;
   createdAt: string;
 }
 

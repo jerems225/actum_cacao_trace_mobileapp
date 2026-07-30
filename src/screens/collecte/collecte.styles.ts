@@ -236,7 +236,9 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
   },
   inputGroup: {
     marginBottom: scale(14),
-    gap: scale(6),
+    // 6 collait le titre à son champ : à cette distance, le libellé se lit comme
+    // faisant partie de la bordure de saisie plutôt que comme la question posée.
+    gap: scale(9),
     // Un groupe de champ ne doit jamais élargir son parent.
     minWidth: 0,
   },
@@ -245,6 +247,34 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     lineHeight: scale(17),
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  /**
+   * Titre d'un ensemble qui n'est PAS un `inputGroup` — sélecteur de
+   * sous-placette, sélecteur de nature du sujet.
+   *
+   * Ces titres étaient de simples `inputLabel` posés juste avant leur contrôle :
+   * sans le `gap` de l'`inputGroup` pour les espacer, ils venaient buter contre
+   * les puces. L'espacement est donc porté par le style, et non par la structure.
+   */
+  labelBloc: {
+    fontSize: scale(12),
+    lineHeight: scale(17),
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: scale(9),
+  },
+  /**
+   * Titre d'un second champ dans un même encadré (ex. « Photo de diagnostic »
+   * sous « Maladie »). Remplace un `marginTop` écrit à la main dans le JSX, qui
+   * échappait au facteur d'échelle et restait donc identique sur tablette.
+   */
+  labelSuivant: {
+    fontSize: scale(12),
+    lineHeight: scale(17),
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: scale(14),
+    marginBottom: scale(9),
   },
   optionalTag: {
     fontSize: scale(11),
@@ -353,7 +383,9 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: scale(8),
-    marginTop: 2,
+    // Décollé de son titre : les puces d'état sanitaire venaient buter sous
+    // « État de santé », qu'on lisait alors comme la première puce de la série.
+    marginTop: scale(3),
   },
   chip: {
     flexDirection: 'row',
@@ -606,34 +638,55 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
   spTextActive: {
     color: colors.textLight,
   },
+  /**
+   * Sélecteur de nature du sujet — TROIS catégories depuis que les « autres
+   * arbres » ont rejoint le Bloc D.
+   *
+   * Même parti que `spSelector` : les puces se REPLIENT au lieu de se comprimer.
+   * À trois `flex: 1` sur une seule rangée, chaque puce tombait à un tiers de la
+   * largeur, et « Arbre d'ombrage » s'y tronquait sur un petit téléphone. Ici
+   * elles gardent une largeur lisible et passent à la rangée suivante quand
+   * l'écran ne suit plus — deux puis une, plutôt que trois illisibles.
+   */
   typeSelector: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: scale(8),
+    marginBottom: scale(6),
   },
   typeBtn: {
-    flex: 1,
-    flexDirection: 'row',
+    // Icône AU-DESSUS du libellé : en ligne, elle prenait sur la largeur du
+    // texte, qui est précisément ce qui manquait. En colonne, le libellé
+    // dispose de toute la puce.
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    gap: scale(5),
+    paddingVertical: scale(11),
+    paddingHorizontal: scale(8),
     borderRadius: 12,
     backgroundColor: colors.backgroundLight,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    gap: 6,
+    // Se partagent la largeur à parts égales, avec un plancher qui déclenche le
+    // repli plutôt que la troncature.
+    flexGrow: 1,
+    flexBasis: scale(92),
+    minWidth: scale(86),
   },
   typeBtnActive: {
     backgroundColor: colors.forestDark,
     borderColor: colors.forestDark,
   },
   typeBtnText: {
-    fontSize: scale(12),
+    fontSize: scale(11.5),
+    lineHeight: scale(15),
     fontWeight: '700',
     color: colors.textPrimary,
-    // « Arbre d'ombrage » sur petit écran : le texte se resserre au lieu de
-    // faire grossir le bouton au-delà de sa moitié de largeur.
+    // Centré, et deux lignes autorisées dans le composant : « Arbre d'ombrage »
+    // passe à la ligne proprement sous son icône au lieu d'être tronqué.
+    textAlign: 'center',
     flexShrink: 1,
+    minWidth: 0,
   },
   typeBtnTextActive: {
     color: colors.textLight,
@@ -671,11 +724,13 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
   maladieBox: {
     backgroundColor: '#FEF3F2',
     borderRadius: 14,
-    padding: 14,
+    padding: scale(14),
     borderWidth: 1,
     borderColor: '#FCA5A5',
-    marginBottom: 14,
-    gap: 4,
+    marginBottom: scale(14),
+    // 4 collait « Maladie * » à sa liste déroulante et « Photo justificative »
+    // à son bouton, dans le bloc le plus dense de l'écran.
+    gap: scale(8),
   },
   photoBtn: {
     flexDirection: 'row',
@@ -732,6 +787,131 @@ const createStyles = ({ scale, isTablet, isSmallPhone }: Responsive) => {
     color: colors.emeraldPrimary,
     fontWeight: '800',
     fontSize: scale(13),
+    // Le libellé de correction est plus long que celui d'ajout : il se resserre
+    // plutôt que de pousser l'icône hors du bouton.
+    flexShrink: 1,
+  },
+  /* En correction, l'action porte une bordure : le bouton reste au même endroit
+     avec le même poids visuel, mais on voit qu'il ne fait plus la même chose. */
+  addMesureBtnEdition: {
+    borderWidth: 1.5,
+    borderColor: colors.emeraldPrimary,
+  },
+  /* Bandeau de correction, en tête du formulaire. Un formulaire prérempli sans
+     un mot laisse croire à une saisie neuve — et « Ajouter » à un doublon. */
+  editionBandeau: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: colors.mintBadge,
+    borderRadius: 12,
+    padding: scale(12),
+    marginBottom: 14,
+  },
+  editionBandeauTexte: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: scale(12),
+    fontWeight: '700',
+    color: colors.emeraldPrimary,
+    lineHeight: scale(17),
+  },
+  /* Sortie de la correction : discrète, en texte. Elle ne doit pas rivaliser
+     avec l'action d'enregistrement, mais rester atteignable. */
+  annulerEditionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  annulerEditionTexte: {
+    flexShrink: 1,
+    fontSize: scale(12),
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  /* Accès à la liste des sujets relevés. En pleine couleur, à la différence de
+     l'ajout : la liste était introuvable, reléguée en pied de formulaire dans le
+     même vert pâle que tout le reste. */
+  voirMesuresBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.emeraldPrimary,
+    paddingVertical: 12,
+    paddingHorizontal: scale(14),
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  voirMesuresTexte: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    color: colors.textLight,
+    fontWeight: '800',
+    fontSize: scale(12.5),
+  },
+  /* --- Onglet Comptage : une carte par sous-placette --- */
+  comptageCarte: {
+    marginTop: 14,
+    padding: scale(14),
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.backgroundLight,
+  },
+  comptageEntete: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginBottom: 10,
+  },
+  comptageTitre: {
+    fontSize: scale(15),
+    fontWeight: '900',
+    color: colors.textPrimary,
+  },
+  comptageSousTitre: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: scale(11.5),
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  comptageLignes: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  comptageLigne: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.backgroundCard,
+  },
+  comptageChiffre: {
+    fontSize: scale(19),
+    fontWeight: '900',
+    color: colors.emeraldPrimary,
+  },
+  comptageEtiquette: {
+    fontSize: scale(10),
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  /* Incohérence signalée sans blocage : l'agent est peut-être en train de taper
+     son nombre, et l'interrompre au deuxième chiffre serait pénible. */
+  comptageAlerte: {
+    fontSize: scale(12),
+    fontWeight: '700',
+    color: colors.warning,
+    marginTop: 4,
   },
   mesuresList: {
     marginTop: 16,
